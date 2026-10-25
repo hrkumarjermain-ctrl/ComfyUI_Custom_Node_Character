@@ -21,6 +21,7 @@ const CHIP_PREVIEW = 18;
 const LIST_PREVIEW = 6;
 const HISTORY_LIMIT = 40;
 const STUDIO_TITLE = "Character Architect Studio";
+const STUDIO_VERSION = "0.3.1";
 const TEXT_TYPES = new Set(["text", "customtext", "textarea", "string", "STRING"]);
 const NUMBER_TYPES = new Set(["number", "slider", "INT", "FLOAT"]);
 const TOGGLE_TYPES = new Set(["toggle", "boolean", "BOOLEAN"]);
@@ -43,7 +44,10 @@ function comboValues(widget, node) {
 }
 
 function widgetKind(node, widget) {
-    if (!widget?.name || widget.hidden || widget.options?.hidden) return "skip";
+    if (!widget?.name) return "skip";
+    // Another frontend may hide the Character Architect widgets to draw its own
+    // UI; they are still the node's real inputs, so the Studio keeps them.
+    if ((widget.hidden || widget.options?.hidden) && !isCharacterNode(node)) return "skip";
     const type = widget.type;
     if (type === "button" || type === "cpf-section" || String(widget.name).startsWith("cpf_section_") || widget.__casLauncher) return "skip";
     if (DISPLAY_NODE.test(nodeClass(node))) return "skip";
@@ -600,6 +604,8 @@ export class CharacterStudio {
             [...PIPELINE_ROLES, TURNAROUND_ROLE].filter((role) => counts.get(role.id)).map((role) => item(role.id, role.label, counts.get(role.id))),
             h("div", { class: "cas-nav-divider" }),
             item("all", "All nodes", nodes.length),
+            h("div", { class: "cas-nav-divider" }),
+            item("diagnostics", "ⓘ Diagnostics", 0),
         );
     }
 
@@ -648,7 +654,17 @@ export class CharacterStudio {
             section.hint && h("p", { class: "cas-hint" }, section.hint),
             heroes.map((widget) => this.renderField(cpf, widget, { character: true, hero: true })),
             rest.map((widget) => this.renderField(cpf, widget, { character: true })),
-            !widgets.length && h("p", { class: "cas-empty" }, "Your Character Architect node has none of these inputs."),
+            !widgets.length && h("div", { class: "cas-empty" },
+                h("p", {}, "Your Character Architect node has none of these inputs under the names the Studio expects."),
+                h("button", {
+                    class: "cas-btn", title: "Collect the node's input names so they can be mapped",
+                    onclick: () => {
+                        this.view = "settings";
+                        this.pipelineRole = "diagnostics";
+                        this.renderAll();
+                    },
+                }, "ⓘ Open diagnostics"),
+            ),
             section.pipelineText && this.renderPipelineTextFields(),
         );
     }
@@ -720,6 +736,10 @@ export class CharacterStudio {
             },
         });
 
+        if (role === "diagnostics") {
+            this.renderDiagnostics();
+            return;
+        }
         let body;
         let title;
         if (role === "essentials") {
@@ -1064,6 +1084,63 @@ export class CharacterStudio {
                 }))
                 : h("p", { class: "cas-muted" }, "No results yet."),
         );
+    }
+
+    // ------------------------------------------------------------ diagnostics
+
+    // A compact report of what the Studio sees on the Character Architect node,
+    // to paste into a support conversation. Text values are cut to 40 characters.
+    async buildDiagnostics() {
+        const cpf = this.scope?.cpf;
+        let comfyui = null;
+        try {
+            const stats = await this.api.getSystemStats?.();
+            comfyui = stats?.system?.comfyui_version ?? null;
+        } catch {
+            comfyui = null;
+        }
+        const nodeData = cpf?.constructor?.nodeData ?? {};
+        const defined = [...Object.keys(nodeData.input?.required ?? {}), ...Object.keys(nodeData.input?.optional ?? {})];
+        const known = new Set(SECTIONS.flatMap((section) => section.keys));
+        const widgets = (cpf?.widgets ?? []).map((widget) => {
+            const value = widget.value;
+            const shown = typeof value === "string" ? value.slice(0, 40) : value && typeof value === "object" ? "[object]" : value;
+            return [widget.name, widget.type ?? null, widgetKind(cpf, widget), widget.hidden || widget.options?.hidden ? 1 : 0,
+                known.has(widget.name) ? 1 : 0, comboValues(widget, cpf).length, shown];
+        });
+        const lines = [
+            `studio ${STUDIO_VERSION} | frontend ${globalThis.__COMFYUI_FRONTEND_VERSION__ ?? "?"} | comfyui ${comfyui ?? "?"}`,
+            `node class=${nodeClass(cpf)} title=${JSON.stringify(cpf?.title ?? "")} module=${nodeData.python_module ?? "?"} location=${this.scope?.inRoot ? "canvas" : "subgraph"}`,
+            `inputs defined=${defined.length} widgets=${widgets.length} matched=${widgets.filter((row) => row[4]).length}`,
+            `defined input names: ${defined.join(", ")}`,
+            "widgets [name, type, kind, hidden, matched, options, value]:",
+            ...widgets.map((row) => JSON.stringify(row)),
+        ];
+        return lines.join("\n");
+    }
+
+    async renderDiagnostics() {
+        const output = h("textarea", { class: "cas-textarea cas-diagnostics", readonly: true, rows: "18", spellcheck: "false", value: "Collecting…" });
+        fill(this.els.main,
+            h("div", { class: "cas-main-head" },
+                h("span", { class: "cas-main-title" }, "Diagnostics"),
+                h("span", { class: "cas-main-meta" }, `Character Studio ${STUDIO_VERSION}`),
+                h("div", { class: "cas-spacer" }),
+                h("button", {
+                    class: "cas-btn cas-primary",
+                    onclick: () => navigator.clipboard?.writeText(output.value).then(
+                        () => this.toast("success", "Character Studio", "Diagnostics copied. Paste them into the chat."),
+                        () => {
+                            output.select();
+                            this.toast("warn", "Character Studio", "Clipboard blocked: the text is selected, press Ctrl+C.");
+                        },
+                    ),
+                }, "Copy"),
+            ),
+            h("p", { class: "cas-hint" }, "What the Studio sees on your Character Architect node: its input names, widget types, which node pack registered it, and your ComfyUI version. Text values are cut to 40 characters. Copy it and paste it into the chat."),
+            output,
+        );
+        output.value = await this.buildDiagnostics();
     }
 
     // ------------------------------------------------------------ fields
