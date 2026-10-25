@@ -426,3 +426,13 @@
 .cas-notice { max-width: 80ch; margin-top: 14px; padding: 12px 14px; border: 1px solid #5a2a2e; border-radius: 6px; background: #1e1416; color: #f0c4c8; line-height: 1.5; }
 .cas-notice p { margin: 0 0 8px; }
 .cas-notice p:last-child { margin-bottom: 0; color: var(--cas-muted); }
+
+/* ---------- custom values */
+.cas-chip.cas-custom { border-style: dashed; }
+.cas-chip.on.cas-custom { border-style: solid; max-width: 520px; }
+.cas-chip.overridden { opacity: 0.45; }
+.cas-chip.overridden.on, .cas-opt.overridden.on { opacity: 1; }
+.cas-opt.overridden { opacity: 0.45; }
+.cas-custom-on { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; }
+.cas-custom-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cas-custom-input { max-width: 420px; height: 28px; border-color: var(--cas-accent); }

@@ -6,7 +6,8 @@
 import {
     ARCHETYPE_KEYS, ESSENTIAL_WIDGETS, FIELD_LABELS, GLOBAL_PIVOT_KEYS, HIDDEN_CHARACTER_KEYS,
     KEY_TO_LOCK_GROUP, LOCK_GROUPS, NODE_MODES, PIPELINE_ROLES, PIVOT_LOCKS, RANDOM_PROTECTED_KEYS,
-    SECTIONS, SET_RANDOM_SKIP_KEYS, SPECIAL_VALUES, TURNAROUND_ROLE, TURNAROUND_SETTINGS, canonicalChoice, colorSwatch, genderAwareValues,
+    CUSTOM_VALUE_EXAMPLES, CUSTOM_VALUE_EXTRA_FIELDS, SECTIONS, SET_RANDOM_SKIP_KEYS, SPECIAL_VALUES, TURNAROUND_ROLE,
+    TURNAROUND_SETTINGS, canonicalChoice, colorSwatch, genderAwareValues,
     genderTag, humanize,
 } from "./cs_constants.js";
 import {
@@ -113,6 +114,43 @@ function isPlaceholderNode(node) {
 
 function nodeTitle(node) {
     return node?.title || nodeClass(node) || `Node ${node?.id}`;
+}
+
+// Character Architect "custom_values": one "field=value" per line, parsed the
+// same way as the node (later lines win, "#" lines and unknown text are kept).
+function customKey(raw) {
+    return String(raw).trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function parseCustomValues(text) {
+    const values = new Map();
+    for (const line of String(text ?? "").split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+        const index = trimmed.indexOf("=");
+        const field = customKey(trimmed.slice(0, index));
+        const value = trimmed.slice(index + 1).trim().replace(/^,+|,+$/g, "").trim();
+        if (!value) continue;
+        values.delete(field);
+        values.set(field, value);
+    }
+    return values;
+}
+
+// Sets (or, with an empty value, removes) the lines of the given fields,
+// keeping every other line exactly as written.
+function updateCustomValues(text, changes) {
+    const lines = String(text ?? "").split(/\r?\n/).filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        if (trimmed.startsWith("#") || !trimmed.includes("=")) return true;
+        return !changes.has(customKey(trimmed.slice(0, trimmed.indexOf("="))));
+    });
+    for (const [field, value] of changes) {
+        const clean = String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+        if (clean) lines.push(`${field}=${clean}`);
+    }
+    return lines.join("\n");
 }
 
 function optionLabel(value) {
@@ -232,6 +270,7 @@ export class CharacterStudio {
         this.searchTimer = null;
         this.sheets = new Map();
         this.batchRunning = false;
+        this.editingCustom = null;
     }
 
     // ------------------------------------------------------------ lifecycle
@@ -569,9 +608,12 @@ export class CharacterStudio {
     sectionCounts(section) {
         let set = 0;
         let random = 0;
+        const custom = this.customValues();
         for (const widget of this.sectionWidgets(section)) {
             const kind = widgetKind(this.scope.cpf, widget);
-            if (kind === "combo") {
+            if (kind === "combo" && custom.has(widget.name)) {
+                set += 1;
+            } else if (kind === "combo") {
                 if (isConcrete(widget.value)) set += 1;
                 else if (typeof widget.value === "string" && widget.value.endsWith("Random")) random += 1;
             } else if (kind === "text" && String(widget.value ?? "").trim()) {
@@ -1179,7 +1221,8 @@ export class CharacterStudio {
                 opts.character && PIVOT_LOCKS.has(name) && this.renderPivotLock(name),
             ),
             opts.note && h("div", { class: "cas-field-note" }, opts.note),
-            kind === "combo" && !linked && h("div", { class: "cas-field-value" }, optionLabel(widget.value)),
+            kind === "combo" && !linked && h("div", { class: "cas-field-value" },
+                opts.character && this.customValues().has(name) ? `✎ ${this.customValues().get(name)}` : optionLabel(widget.value)),
         );
 
         let control;
@@ -1269,9 +1312,15 @@ export class CharacterStudio {
             if (!SPECIAL_VALUES.has(widget.value) && all.includes(widget.value) && !shown.includes(widget.value)) {
                 shown = [widget.value, ...shown];
             }
-            const option = (value) => this.renderOption(node, widget, value, { asList, swatches });
+            const custom = opts.character ? this.customValues().get(widget.name) : undefined;
+            const option = (value) => this.renderOption(node, widget, value, { asList, swatches, custom });
             fill(zone,
-                specials.length > 0 && h("div", { class: "cas-chips" }, specials.map((value) => this.renderOption(node, widget, value, { special: true }))),
+                (specials.length > 0 || opts.character) && h("div", { class: "cas-chips" },
+                    specials.map((value) => this.renderOption(node, widget, value, { special: true, custom })),
+                    opts.character && this.renderCustomChip(widget, custom, paint),
+                ),
+                opts.character && this.editingCustom === widget.name && this.renderCustomEditor(widget, custom, paint),
+                custom && h("div", { class: "cas-muted" }, "Your text replaces this field in the prompt. Pick an option to go back."),
                 unknownValue && h("div", { class: "cas-warn" }, `Current value "${widget.value}" is not in this node's list.`),
                 asList
                     ? h("div", { class: "cas-list" }, shown.map(option))
@@ -1306,20 +1355,116 @@ export class CharacterStudio {
         ];
     }
 
-    renderOption(node, widget, value, { special = false, asList = false, swatches = false } = {}) {
-        const on = widget.value === value;
+    renderOption(node, widget, value, { special = false, asList = false, swatches = false, custom } = {}) {
+        const on = widget.value === value && !custom;
         const tag = genderTag(value);
         const swatch = swatches && !special ? colorSwatch(value) : null;
         return h("button", {
-            class: `${asList ? "cas-opt" : "cas-chip"}${on ? " on" : ""}${special ? " special" : ""}`,
+            class: `${asList ? "cas-opt" : "cas-chip"}${on ? " on" : ""}${special ? " special" : ""}${custom ? " overridden" : ""}`,
             title: String(value),
             onclick: () => {
-                if (this.setValue(node, widget, value)) this.afterChange(node);
+                // Picking a preset ends a custom value for this field.
+                this.inBatch(() => {
+                    if (custom) this.setCustomValues(new Map([[widget.name, ""]]));
+                    this.setValue(node, widget, value);
+                });
+                this.editingCustom = null;
+                this.afterChange(node);
             },
         },
         swatch && h("span", { class: "cas-swatch", style: { background: swatch } }),
         h("span", { class: "cas-opt-text" }, optionLabel(value)),
         tag && h("span", { class: `cas-tag cas-tag-${tag}` }, tag === "female" ? "F" : tag === "male" ? "M" : "U"),
+        );
+    }
+
+    // ------------------------------------------------------------ custom values
+
+    customValuesWidget() {
+        return this.cpfWidget("custom_values");
+    }
+
+    customValues() {
+        return parseCustomValues(this.customValuesWidget()?.value);
+    }
+
+    // Fields Character Architect accepts in custom_values: its category list
+    // (the Override field options) plus a few extra inputs.
+    customFieldSet() {
+        const override = this.cpfWidget("override_field");
+        const fields = new Set(comboValues(override, this.scope.cpf).filter((value) => value !== "None"));
+        CUSTOM_VALUE_EXTRA_FIELDS.forEach((field) => fields.add(field));
+        return fields;
+    }
+
+    setCustomValues(changes) {
+        const widget = this.customValuesWidget();
+        if (!widget || !changes.size) return false;
+        return this.setValue(this.scope.cpf, widget, updateCustomValues(widget.value, changes));
+    }
+
+    renderCustomChip(widget, custom, repaint) {
+        if (!this.customValuesWidget()) {
+            return h("button", {
+                class: "cas-chip special", disabled: true,
+                title: "Custom values need the Character Architect version with the custom_values input (see the README).",
+            }, "✎ Custom");
+        }
+        if (!this.customFieldSet().has(widget.name)) return null;
+        const edit = () => {
+            this.editingCustom = widget.name;
+            repaint();
+            this.root?.querySelector(".cas-custom-input")?.focus();
+        };
+        if (!custom) {
+            return h("button", { class: "cas-chip special cas-custom", title: "Type your own value for this field", onclick: edit }, "✎ Custom…");
+        }
+        return h("span", { class: "cas-custom-on" },
+            h("button", { class: "cas-chip on cas-custom", title: "Your own value. Click to edit.", onclick: edit },
+                h("span", { class: "cas-opt-text" }, `✎ ${custom}`)),
+            h("button", {
+                class: "cas-icon-btn", title: "Remove the custom value",
+                onclick: () => {
+                    this.setCustomValues(new Map([[widget.name, ""]]));
+                    this.afterCharacterChange();
+                },
+            }, "✕"),
+        );
+    }
+
+    renderCustomEditor(widget, custom, repaint) {
+        let done = false;
+        const finish = (save, value) => {
+            if (done) return;
+            done = true;
+            this.editingCustom = null;
+            if (save && value.trim() !== (custom ?? "")) {
+                this.setCustomValues(new Map([[widget.name, value]]));
+                this.afterCharacterChange();
+            } else {
+                repaint();
+            }
+        };
+        const example = CUSTOM_VALUE_EXAMPLES[widget.name];
+        const input = h("input", {
+            class: "cas-text cas-custom-input", value: custom ?? "", spellcheck: "true",
+            placeholder: example ? `Your own value, e.g. ${example}` : "Your own value for this field",
+            onkeydown: (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    finish(true, event.target.value);
+                } else if (event.key === "Escape") {
+                    // Cancel the edit without closing the Studio.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    finish(false, "");
+                }
+            },
+            onblur: (event) => finish(true, event.target.value),
+        });
+        return h("div", { class: "cas-custom-row" },
+            input,
+            h("span", { class: "cas-muted" }, "Enter to apply · Esc to cancel · empty removes it"),
         );
     }
 
@@ -1550,6 +1695,8 @@ export class CharacterStudio {
         const cpf = this.scope.cpf;
         const keySet = keys ? new Set(keys) : null;
         const locked = keySet ? new Set() : this.lockedKeys();
+        const custom = this.customValues();
+        const cleared = new Map();
         this.inBatch(() => {
             for (const widget of cpf.widgets ?? []) {
                 const name = widget?.name;
@@ -1557,8 +1704,12 @@ export class CharacterStudio {
                 if (RANDOM_PROTECTED_KEYS.has(name) || SET_RANDOM_SKIP_KEYS.has(name) || name.startsWith("lock_")) continue;
                 if (keySet && !keySet.has(name)) continue;
                 if (!keySet && (locked.has(name) || GLOBAL_PIVOT_KEYS.has(name) || this.isPivotLocked(name))) continue;
-                if (comboValues(widget, cpf).includes("Random")) this.setValue(cpf, widget, "Random");
+                if (comboValues(widget, cpf).includes("Random")) {
+                    this.setValue(cpf, widget, "Random");
+                    if (custom.has(name)) cleared.set(name, "");
+                }
             }
+            this.setCustomValues(cleared);
             // Scene scenario is a rare branch; SET ALL RANDOM deliberately arms it.
             const scenarioInScope = (!keySet || keySet.has("scene_scenario")) && !locked.has("scene_scenario");
             const scenario = this.cpfWidget("scene_scenario");
@@ -1571,6 +1722,8 @@ export class CharacterStudio {
         const cpf = this.scope.cpf;
         const keySet = keys ? new Set(keys) : null;
         const locked = keySet ? new Set() : this.lockedKeys();
+        const custom = this.customValues();
+        const cleared = new Map();
         this.inBatch(() => {
             for (const widget of cpf.widgets ?? []) {
                 const name = widget?.name;
@@ -1583,18 +1736,22 @@ export class CharacterStudio {
                 else if (name === "free_prompt_position") this.setValue(cpf, widget, "After introduction");
                 else if (name === "species_mode") this.setValue(cpf, widget, "Human");
                 else if (kind === "combo" && comboValues(widget, cpf).includes("None")) this.setValue(cpf, widget, "None");
+                if (custom.has(name)) cleared.set(name, "");
             }
+            this.setCustomValues(cleared);
         });
         this.afterCharacterChange();
     }
 
     resetToDefaults(node, keys) {
+        const custom = node === this.scope.cpf ? this.customValues() : new Map();
         this.inBatch(() => {
             for (const name of keys) {
                 const widget = (node.widgets ?? []).find((item) => item.name === name);
                 const value = defaultValue(node, name);
                 if (widget && value !== undefined && !isWidgetLinked(node, widget)) this.setValue(node, widget, value);
             }
+            this.setCustomValues(new Map(keys.filter((name) => custom.has(name)).map((name) => [name, ""])));
         });
         this.afterChange(node);
     }

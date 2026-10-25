@@ -128,6 +128,18 @@ know yet appears under **Other**.
 The list is stored in the `Turnaround · Angle list` node (a `#` in front of a line
 disables it), so it travels with the workflow.
 
+**Custom values** — every option field (ethnicity, age, height, hair colour, pose, …)
+has a **✎ Custom…** chip. Type your own value, e.g. `24 to 26 years old`, `1.80 m tall`
+or `Ethiopian Amhara`, and press Enter. Your text replaces that field in the prompt
+exactly as written, after every random, guidance and compatibility rule. Picking a
+preset again, or ✕, removes it; section *All random / All none / Defaults* clear the
+custom values of the fields they change. The values live in Character Architect's
+`custom_values` input as `field=value` lines, so they are saved with the workflow, with
+saved characters and in each run's settings. This needs a Character Architect version
+with the `custom_values` input; with an older version the chips are shown disabled.
+With a custom ethnicity, Ethnicity guidance has no anchor for that text, so the
+custom text is used as written.
+
 **⚙ Settings view** — the pipeline:
 
 - *Essentials*: diffusion model, text encoder, VAE, aspect ratio / megapixels, the LoRA

@@ -103,8 +103,8 @@ export const SECTIONS = [
     },
     {
         id: "text", label: "Text & Wildcards", lock: "custom_inputs", divider: true, pipelineText: true,
-        keys: ["free_prompt_position", "free_prompt", "face_hair_text_override", "setting_text_override", "pose_text_override", "custom_color_overrides", "wildcard_subject", "wildcard_clothing", "wildcard_pose", "wildcard_setting", "wildcard_photography"],
-        hint: "Free prompt, structured overrides and wildcard lines, plus the plain prompt fields of the surrounding pipeline.",
+        keys: ["free_prompt_position", "free_prompt", "custom_values", "face_hair_text_override", "setting_text_override", "pose_text_override", "custom_color_overrides", "wildcard_subject", "wildcard_clothing", "wildcard_pose", "wildcard_setting", "wildcard_photography"],
+        hint: "Free prompt, your custom field values (one field=value per line), structured overrides and wildcard lines, plus the plain prompt fields of the surrounding pipeline.",
     },
     {
         id: "inspect", label: "Override & Inspect", lock: "override_inspection",
@@ -193,11 +193,28 @@ export const FIELD_LABELS = {
     lighting_style: "Lighting", optical_effect: "Optics",
     free_prompt_position: "Free prompt position", free_prompt: "Free prompt",
     face_hair_text_override: "Face / hair override", setting_text_override: "Setting override",
-    pose_text_override: "Pose override", custom_color_overrides: "Colour overrides",
+    pose_text_override: "Pose override", custom_color_overrides: "Colour overrides", custom_values: "Custom values",
     wildcard_subject: "Wildcard · subject", wildcard_clothing: "Wildcard · clothing",
     wildcard_pose: "Wildcard · pose", wildcard_setting: "Wildcard · setting",
     wildcard_photography: "Wildcard · photography",
     override_field: "Override field", inspect_property: "Inspect property",
+};
+
+// Fields outside Character Architect's category list that still accept custom text.
+export const CUSTOM_VALUE_EXTRA_FIELDS = ["eye_focus", "mouth_expression"];
+
+// Example text shown in the custom-value box.
+export const CUSTOM_VALUE_EXAMPLES = {
+    origin_age: "24 to 26 years old",
+    origin_ethnicity: "Ethiopian Amhara",
+    body_type: "1.80 m tall",
+    body_physique: "lean swimmer's build",
+    hair_color: "copper with blonde balayage",
+    hair_length: "hair just past the shoulder blades",
+    eye_color: "grey-green",
+    expression: "a faint, knowing smile",
+    setting: "a rain-soaked Tokyo side street at night",
+    pose: "leaning on a railing, one foot crossed over the other",
 };
 
 // Pipeline widgets surfaced at the top of Settings.
