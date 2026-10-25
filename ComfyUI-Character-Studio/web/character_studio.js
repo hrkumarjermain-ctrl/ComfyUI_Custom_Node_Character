@@ -52,7 +52,7 @@ function scheduleLauncherScan() {
 }
 
 function describeTarget(node) {
-    if (isCharacterNode(node)) return "Character Architect node";
+    if (isCharacterNode(node)) return node.constructor?.nodeData ? "Character Architect node" : "Character Architect node · not installed";
     const inner = findCharacterNode(node.subgraph);
     return inner?.graph === node.subgraph ? "subgraph" : "nested subgraph";
 }

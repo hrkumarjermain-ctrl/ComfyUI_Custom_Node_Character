@@ -105,6 +105,12 @@ function isMultilineText(widget) {
     return widget.type === "customtext" || widget.type === "textarea" || !!widget.options?.multiline;
 }
 
+// A node whose type is not installed is loaded as a plain placeholder with no
+// definition: its widgets are "UNKNOWN_n" text boxes holding the saved values.
+function isPlaceholderNode(node) {
+    return !!node && !node.constructor?.nodeData;
+}
+
 function nodeTitle(node) {
     return node?.title || nodeClass(node) || `Node ${node?.id}`;
 }
@@ -627,6 +633,17 @@ export class CharacterStudio {
     }
 
     renderCharacterMain() {
+        if (isPlaceholderNode(this.scope.cpf)) {
+            fill(this.els.main,
+                h("div", { class: "cas-main-head" }, h("span", { class: "cas-main-title" }, "Character Architect is not installed")),
+                h("div", { class: "cas-notice" },
+                    h("p", {}, "ComfyUI loaded this Character Architect node as a missing-node placeholder: no installed node pack provides “CharacterPromptFactory”. A placeholder only keeps the saved values, not the option lists, so there is nothing to choose from."),
+                    h("p", {}, "Install or repair the Character Architect node pack in ComfyUI/custom_nodes, restart ComfyUI, then load the workflow again. If the pack is installed, the ComfyUI start-up log shows why it failed to import."),
+                    h("p", {}, "Settings and Turnaround keep working for the rest of the pipeline."),
+                ),
+            );
+            return;
+        }
         const section = this.currentSection();
         const widgets = this.sectionWidgets(section);
         const { set, random } = this.sectionCounts(section);
@@ -1111,7 +1128,7 @@ export class CharacterStudio {
         const lines = [
             `studio ${STUDIO_VERSION} | frontend ${globalThis.__COMFYUI_FRONTEND_VERSION__ ?? "?"} | comfyui ${comfyui ?? "?"}`,
             `node class=${nodeClass(cpf)} title=${JSON.stringify(cpf?.title ?? "")} module=${nodeData.python_module ?? "?"} location=${this.scope?.inRoot ? "canvas" : "subgraph"}`,
-            `inputs defined=${defined.length} widgets=${widgets.length} matched=${widgets.filter((row) => row[4]).length}`,
+            `inputs defined=${defined.length} widgets=${widgets.length} matched=${widgets.filter((row) => row[4]).length} placeholder=${isPlaceholderNode(cpf) ? "yes (node pack not loaded)" : "no"}`,
             `defined input names: ${defined.join(", ")}`,
             "widgets [name, type, kind, hidden, matched, options, value]:",
             ...widgets.map((row) => JSON.stringify(row)),

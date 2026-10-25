@@ -172,6 +172,16 @@ ComfyUI's own user-data API, so they are available in every workflow. **Load** p
 character back on the node and sets both seeds to Fixed; **→** makes it the turnaround
 reference.
 
+## Troubleshooting
+
+- **"Character Architect is not installed"** in the Character view, or fields named
+  `UNKNOWN_1`, `UNKNOWN_2`, … in *ⓘ Diagnostics*: ComfyUI has no node pack providing
+  `CharacterPromptFactory`, so it loaded the node as a missing-node placeholder. Install
+  or repair the Character Architect node pack, restart ComfyUI and load the workflow
+  again. The start-up log lists packs that failed to import.
+- **Sections are empty for another reason**: open **⚙ Settings → ⓘ Diagnostics**, copy
+  the report and share it.
+
 ## Security notes
 
 - The Studio only builds the page with text nodes, never HTML strings, so option values
