@@ -18,6 +18,20 @@ pipeline. That means:
 - For the bundled Krea2 workflow: the custom node packs it uses (ComfyUI Manager's
   *Install Missing Custom Nodes* finds them).
 
+## Krea2 workflow
+
+`Character Architect UI design/uploads/Character Architect - Krea2 Rework Claude.json`
+(API format; drag it onto the ComfyUI canvas to load it). Pipeline: base sampler →
+chain resample → upscale → detail pass → post-processing.
+
+- The base pass uses the full character + scene prompt (it previously encoded only the
+  empty scene box).
+- Character prompt and scene text are joined with a space.
+- LoRA slots 2 and 3 are disabled placeholders.
+
+The Studio itself is model-agnostic: it drives whatever loaders, samplers and LoRAs the
+pipeline contains, so a different model pipeline works without changes to the Studio.
+
 ## Install
 
 ```bash
@@ -124,4 +138,6 @@ character_architect_v17.text    reference copy of the node's own frontend
 
 1. **Base (this version)** — build and render the character.
 2. **Evolve** — take a saved character and produce front / side / back angles for a
-   consistent character sheet, ready to drop into other scenes or video.
+   consistent character sheet, ready to drop into other scenes or video. Built on
+   Krea2 first.
+3. **Model switch** — a Qwen pipeline as an alternative to Krea2.

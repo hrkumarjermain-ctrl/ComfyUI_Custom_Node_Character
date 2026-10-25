@@ -198,22 +198,6 @@
       "title": "ClownsharKSampler"
     }
   },
-  "359": {
-    "inputs": {
-      "text": [
-        "439",
-        0
-      ],
-      "clip": [
-        "56",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Prompt)"
-    }
-  },
   "360": {
     "inputs": {
       "text": "",
@@ -381,12 +365,12 @@
         "strength": 0.75
       },
       "lora_2": {
-        "on": true,
+        "on": false,
         "lora": "Krea2-realism-V2.safetensors",
         "strength": 0.5
       },
       "lora_3": {
-        "on": true,
+        "on": false,
         "lora": "Krea2-realism-V2.safetensors",
         "strength": 0.5
       },
@@ -412,7 +396,7 @@
       "multiplier": 2,
       "renormalize": true,
       "conditioning": [
-        "359",
+        "442",
         0
       ]
     },
@@ -645,7 +629,7 @@
         "439",
         0
       ],
-      "delimiter": ""
+      "delimiter": " "
     },
     "class_type": "StringConcatenate",
     "_meta": {
