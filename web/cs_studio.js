@@ -6,12 +6,12 @@
 import {
     ARCHETYPE_KEYS, ESSENTIAL_WIDGETS, FIELD_LABELS, GLOBAL_PIVOT_KEYS, HIDDEN_CHARACTER_KEYS,
     KEY_TO_LOCK_GROUP, LOCK_GROUPS, NODE_MODES, PIPELINE_ROLES, PIVOT_LOCKS, RANDOM_PROTECTED_KEYS,
-    SECTIONS, SET_RANDOM_SKIP_KEYS, SPECIAL_VALUES, canonicalChoice, colorSwatch, genderAwareValues,
+    SECTIONS, SET_RANDOM_SKIP_KEYS, SPECIAL_VALUES, TURNAROUND_ROLE, TURNAROUND_SETTINGS, canonicalChoice, colorSwatch, genderAwareValues,
     genderTag, humanize,
 } from "./cs_constants.js";
 import {
-    connectedComponent, findCharacterNode, findStudioTargets, getLink, getNodeById, graphNodes, isCharacterNode,
-    isWidgetLinked, nodeClass, resolveScope, upstreamOf,
+    connectedComponent, findCharacterNode, findHostChain, findStudioTargets, getLink, getNodeById, graphNodes, isCharacterNode,
+    isOutputNode, isWidgetLinked, nodeClass, resolveScope, upstreamOf,
 } from "./cs_graph.js";
 import { fill, h, isEditable } from "./cs_dom.js";
 
@@ -129,6 +129,62 @@ function newId() {
     return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// "sub/dir/name.png [output]" <-> { filename, subfolder, type }: the annotated
+// form LoadImage accepts for files outside the input folder.
+function parseAnnotated(value) {
+    let name = String(value ?? "").trim();
+    if (!name) return null;
+    let type = "input";
+    const match = / \[(output|input|temp)\]$/.exec(name);
+    if (match) {
+        type = match[1];
+        name = name.slice(0, match.index);
+    }
+    const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
+    return { filename: name.slice(slash + 1), subfolder: slash >= 0 ? name.slice(0, slash) : "", type };
+}
+
+// Image refs end up as LoadImage paths: allow plain names inside ComfyUI's
+// output / input / temp folders only, so a tampered characters.json cannot
+// point the server at other files.
+function isSafeRef(ref) {
+    if (!ref || typeof ref.filename !== "string" || !ref.filename || /[\\/]/.test(ref.filename) || /^\.\.?$/.test(ref.filename)) return false;
+    const subfolder = String(ref.subfolder ?? "");
+    if (/^([\\/]|[A-Za-z]:)/.test(subfolder) || subfolder.split(/[\\/]/).includes("..")) return false;
+    return ["output", "input", "temp"].includes(ref.type ?? "output");
+}
+
+function annotate(ref) {
+    return `${ref.subfolder ? `${ref.subfolder}/` : ""}${ref.filename} [${ref.type ?? "output"}]`;
+}
+
+// Angle list text: one "Label: prompt" per line, "#" in front disables a line.
+function parseAngles(text) {
+    return String(text ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line, index) => {
+        const enabled = !line.startsWith("#");
+        const body = enabled ? line : line.replace(/^#+\s*/, "");
+        const match = /^([^:,]{1,32}):\s*(.*)$/.exec(body);
+        return { enabled, label: (match ? match[1] : `Angle ${index + 1}`).trim(), prompt: (match ? match[2] : body).trim() };
+    });
+}
+
+function serializeAngles(angles) {
+    return angles.map((angle) => `${angle.enabled ? "" : "# "}${angle.label || "Angle"}: ${angle.prompt}`).join("\n");
+}
+
+// The Character Architect output alone, without the scene text appended to it.
+function turnaroundRole(node) {
+    return nodeTitle(node).replace(/^Turnaround\s*[·:-]?\s*/i, "").trim();
+}
+
+function characterText(texts) {
+    const list = (texts ?? []).filter((text) => text?.text);
+    const direct = list.find((text) => text.fromCharacter);
+    if (direct) return direct.text;
+    const sorted = [...list].sort((a, b) => a.text.length - b.text.length);
+    return (sorted.find((text) => list.some((other) => other !== text && other.text.startsWith(text.text.trim()))) ?? sorted[0])?.text ?? "";
+}
+
 // ---------------------------------------------------------------- studio
 
 export class CharacterStudio {
@@ -164,6 +220,8 @@ export class CharacterStudio {
         this.graphChangedTimer = null;
         this.sideTimer = null;
         this.searchTimer = null;
+        this.sheets = new Map();
+        this.batchRunning = false;
     }
 
     // ------------------------------------------------------------ lifecycle
@@ -287,15 +345,18 @@ export class CharacterStudio {
     renderHeader() {
         if (!this.root || !this.scope) return;
         const scope = this.scope;
-        const character = this.seedControl("character");
-        let image = this.seedControl("image");
+        const turnaroundView = this.view === "turnaround";
+        const turnaroundSeed = turnaroundView ? this.turnaround()?.seedControl : null;
+        const character = turnaroundView ? null : this.seedControl("character");
+        let image = turnaroundView ? null : this.seedControl("image");
         if (image && character && image.widget === character.widget) image = null;
         fill(this.els.header,
             h("div", { class: "cas-brand", title: this.scopeLabel() },
                 h("span", { class: "cas-title" }, "Character Architect"),
             ),
             h("div", { class: "cas-tabs" },
-                this.tabButton("character", "Character"),
+                this.tabButton("character", "1 · Character"),
+                this.tabButton("turnaround", "2 · Turnaround"),
                 this.tabButton("settings", "⚙ Settings"),
             ),
             h("div", { class: "cas-spacer" }),
@@ -303,6 +364,8 @@ export class CharacterStudio {
                 "Seed fed to Character Architect. It resolves every field left on Random, so keep it fixed to keep the same character."),
             image && this.renderSeed("Image seed", image,
                 "Noise seed of the first sampler. Change it to re-shoot the same character."),
+            turnaroundSeed && this.renderSeed("Turnaround seed", turnaroundSeed,
+                "One seed for every angle of a run, so they match. It advances once after each run if set to +1 or Random."),
             h("button", {
                 class: "cas-btn cas-undo", disabled: !this.undoStack.length, title: "Undo the last Studio change (Ctrl+Z)",
                 onclick: () => this.undo(),
@@ -329,6 +392,7 @@ export class CharacterStudio {
             onclick: () => {
                 this.view = view;
                 this.refreshScope();
+                if (view === "turnaround") this.normalizeEngines();
                 this.renderAll();
             },
         }, label);
@@ -367,6 +431,20 @@ export class CharacterStudio {
     }
 
     renderQueueControls() {
+        if (this.view === "turnaround") {
+            const enabled = this.angleList(this.turnaround()).filter((angle) => angle.enabled).length;
+            return h("div", { class: "cas-run" },
+                this.run.running && h("button", {
+                    class: "cas-btn cas-stop", title: "Interrupt the running generation",
+                    onclick: () => this.interrupt(),
+                }, "Stop"),
+                h("button", {
+                    class: "cas-btn cas-primary", disabled: this.batchRunning || !enabled,
+                    title: "Queue one turnaround run per enabled angle (Ctrl+Enter)",
+                    onclick: () => this.runTurnaround(),
+                }, this.batchRunning ? "Queueing…" : `Generate ${enabled} angle${enabled === 1 ? "" : "s"}`),
+            );
+        }
         return h("div", { class: "cas-run" },
             this.run.running && h("button", {
                 class: "cas-btn cas-stop", title: "Interrupt the running generation",
@@ -380,7 +458,7 @@ export class CharacterStudio {
                 },
             }),
             h("button", {
-                class: "cas-btn cas-primary", title: "Queue the workflow (Ctrl+Enter)",
+                class: "cas-btn cas-primary", title: "Queue the character pipeline (Ctrl+Enter)",
                 onclick: () => this.queue(),
             }, this.run.running ? "Queue more" : "Queue"),
         );
@@ -408,6 +486,7 @@ export class CharacterStudio {
     renderNav() {
         if (!this.root || !this.scope) return;
         if (this.view === "settings") return this.renderPipelineNav();
+        if (this.view === "turnaround") return this.renderTurnaroundNav();
         const items = this.characterSections().map((section) => {
             const { set, random } = this.sectionCounts(section);
             const locked = section.lock && this.isGroupLocked(section.lock);
@@ -518,7 +597,7 @@ export class CharacterStudio {
             ),
             item("essentials", "Essentials", 0),
             h("div", { class: "cas-nav-divider" }),
-            PIPELINE_ROLES.filter((role) => counts.get(role.id)).map((role) => item(role.id, role.label, counts.get(role.id))),
+            [...PIPELINE_ROLES, TURNAROUND_ROLE].filter((role) => counts.get(role.id)).map((role) => item(role.id, role.label, counts.get(role.id))),
             h("div", { class: "cas-nav-divider" }),
             item("all", "All nodes", nodes.length),
         );
@@ -530,6 +609,7 @@ export class CharacterStudio {
         if (!this.root || !this.scope) return;
         const top = this.els.main.scrollTop;
         if (this.view === "settings") this.renderPipelineMain();
+        else if (this.view === "turnaround") this.renderTurnaroundMain();
         else this.renderCharacterMain();
         this.els.main.scrollTop = resetScroll ? 0 : top;
     }
@@ -575,7 +655,7 @@ export class CharacterStudio {
 
     renderPipelineTextFields() {
         const fields = [];
-        for (const node of this.pipelineNodes()) {
+        for (const node of this.pipelineNodes({ turnaround: false })) {
             for (const widget of node.widgets ?? []) {
                 if (widgetKind(node, widget) !== "text" || isWidgetLinked(node, widget) || !isMultilineText(widget)) continue;
                 if (!PROMPT_WIDGET.test(widget.name) && !PROMPT_NODE.test(nodeClass(node))) continue;
@@ -605,13 +685,14 @@ export class CharacterStudio {
         return false;
     }
 
-    pipelineNodes() {
+    pipelineNodes({ turnaround = true } = {}) {
         const scope = this.scope;
         const nodes = [...new Set([...scope.nodes, ...scope.watch.values()])];
-        return nodes.filter((node) => node !== scope.cpf);
+        return nodes.filter((node) => node !== scope.cpf && (turnaround || !scope.isTurnaround(node)));
     }
 
     roleOf(node) {
+        if (this.scope?.isTurnaround(node)) return TURNAROUND_ROLE;
         const cls = nodeClass(node);
         return PIPELINE_ROLES.find((role) => role.test.test(cls)) ?? PIPELINE_ROLES[PIPELINE_ROLES.length - 1];
     }
@@ -643,9 +724,9 @@ export class CharacterStudio {
         let title;
         if (role === "essentials") {
             title = "Essentials";
-            body = this.renderEssentials(nodes);
+            body = this.renderEssentials(nodes.filter((node) => !this.scope.isTurnaround(node)));
         } else {
-            const roleDef = PIPELINE_ROLES.find((item) => item.id === role);
+            const roleDef = [...PIPELINE_ROLES, TURNAROUND_ROLE].find((item) => item.id === role);
             title = role === "all" ? "All nodes" : roleDef?.label ?? "Nodes";
             const shown = role === "all" ? nodes : nodes.filter((node) => this.roleOf(node).id === role);
             body = shown.length
@@ -728,6 +809,260 @@ export class CharacterStudio {
                     this.renderMain();
                 },
             }, "+ Add LoRA"),
+        );
+    }
+
+    // ------------------------------------------------------------ turnaround (phase 2)
+
+    // The phase-2 nodes, found by their "Turnaround · <role>" titles. Every
+    // turnaround Save Image is one engine; the active engine is the one that is not muted.
+    turnaround() {
+        const nodes = this.scope?.turnaroundNodes ?? [];
+        if (!nodes.length) return null;
+        const find = (role) => nodes.find((node) => turnaroundRole(node).toLowerCase() === role);
+        const widgetOf = (node, name) => (node?.widgets ?? []).find((widget) => widget.name === name) ?? null;
+        const reference = find("reference") ?? nodes.find((node) => nodeClass(node) === "LoadImage");
+        const character = find("character");
+        const angle = find("angle");
+        const angleList = find("angle list");
+        const seed = find("seed");
+        const engines = nodes.filter((node) => isOutputNode(node) && SAVE_NODE.test(nodeClass(node))).map((save) => {
+            const label = turnaroundRole(save).replace(/\s*·\s*Save$/i, "").trim() || nodeTitle(save);
+            const key = label.split(/\s+/)[0].toLowerCase();
+            const own = nodes.filter((node) => node !== save && turnaroundRole(node).toLowerCase().startsWith(key));
+            return { save, label, key, nodes: own };
+        }).sort((a, b) => Number(a.save.id) - Number(b.save.id) || String(a.save.id).localeCompare(String(b.save.id)));
+        return {
+            reference, referenceWidget: widgetOf(reference, "image"),
+            character, characterWidget: widgetOf(character, "value"),
+            angle, angleWidget: widgetOf(angle, "value"),
+            angleList, angleListWidget: widgetOf(angleList, "value"),
+            seedControl: seed ? this.seedSource(seed, "seed") : null,
+            engines,
+            active: engines.find((engine) => (engine.save.mode ?? 0) === 0) ?? null,
+        };
+    }
+
+    angleList(turnaround) {
+        if (turnaround?.angleListWidget) return parseAngles(turnaround.angleListWidget.value);
+        return turnaround?.angleWidget ? [{ enabled: true, label: "Angle", prompt: String(turnaround.angleWidget.value ?? "") }] : [];
+    }
+
+    saveAngleList(turnaround, angles) {
+        if (turnaround.angleListWidget) this.setValue(turnaround.angleList, turnaround.angleListWidget, serializeAngles(angles));
+        else if (turnaround.angleWidget && angles[0]) this.setValue(turnaround.angle, turnaround.angleWidget, angles[0].prompt);
+        this.renderMain();
+        this.renderHeader();
+    }
+
+    // A freshly loaded workflow has every engine output active: keep only the first.
+    normalizeEngines() {
+        const turnaround = this.turnaround();
+        const active = turnaround?.engines.filter((engine) => (engine.save.mode ?? 0) === 0) ?? [];
+        if (active.length <= 1) return;
+        for (const engine of active.slice(1)) this.setMode(engine.save, 2);
+    }
+
+    setEngine(engine) {
+        const turnaround = this.turnaround();
+        if (!turnaround) return;
+        this.inBatch(() => {
+            for (const item of turnaround.engines) this.setMode(item.save, item.save === engine.save ? 0 : 2);
+        });
+        this.renderAll();
+    }
+
+    setReference(ref, description) {
+        if (!isSafeRef(ref)) {
+            this.toast("error", "Character Studio", "That image reference points outside ComfyUI's output, input or temp folders and was ignored.");
+            return false;
+        }
+        const turnaround = this.turnaround();
+        if (!turnaround?.referenceWidget) {
+            this.toast("warn", "Character Studio", "This workflow has no “Turnaround · Reference” Load Image node.");
+            return false;
+        }
+        this.inBatch(() => {
+            this.setValue(turnaround.reference, turnaround.referenceWidget, annotate(ref));
+            if (description && turnaround.characterWidget) this.setValue(turnaround.character, turnaround.characterWidget, description);
+        });
+        return true;
+    }
+
+    useForTurnaround(image, texts) {
+        if (!image?.ref) return;
+        if (!this.setReference(image.ref, characterText(texts))) return;
+        this.normalizeEngines();
+        this.view = "turnaround";
+        this.selected = null;
+        this.renderAll();
+    }
+
+    useCharacterForTurnaround(character) {
+        if (!character?.image || !this.setReference(character.image, character.description || character.prompt)) return;
+        const sheet = this.sheetFor(annotate(character.image));
+        for (const entry of character.turnaround ?? []) {
+            if (isSafeRef(entry?.image) && typeof entry.angle === "string" && !sheet.has(entry.angle)) {
+                sheet.set(entry.angle, { ref: entry.image, url: this.viewUrl(entry.image), engine: entry.engine ?? "", time: 0 });
+            }
+        }
+        this.normalizeEngines();
+        this.view = "turnaround";
+        this.renderAll();
+    }
+
+    sheetFor(key) {
+        if (!this.sheets.has(key)) this.sheets.set(key, new Map());
+        return this.sheets.get(key);
+    }
+
+    latestCharacterRun() {
+        return this.history.find((item) => item.phase !== "turnaround") ?? null;
+    }
+
+    renderTurnaroundNav() {
+        const turnaround = this.turnaround();
+        const jump = (anchor, label) => h("button", {
+            class: "cas-nav-item",
+            onclick: () => this.els.main.querySelector(`[data-anchor="${anchor}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" }),
+        }, h("span", {}, label));
+        fill(this.els.nav,
+            h("div", { class: "cas-nav-actions" },
+                h("div", { class: "cas-nav-scope", title: this.scopeLabel() }, this.scopeLabel()),
+                h("div", { class: "cas-nav-caption" }, turnaround?.active ? `Engine: ${turnaround.active.label}` : "No engine active"),
+            ),
+            turnaround && [jump("reference", "Reference"), jump("engine", "Engine"), jump("angles", "Angles"), jump("results", "Results")],
+        );
+    }
+
+    renderTurnaroundMain() {
+        const turnaround = this.turnaround();
+        if (!turnaround) {
+            fill(this.els.main,
+                h("div", { class: "cas-main-head" }, h("span", { class: "cas-main-title" }, "Turnaround")),
+                h("p", { class: "cas-hint" }, "This workflow has no Turnaround nodes. Load workflows/character_architect_krea2.json from this repository: it contains the character pipeline and both turnaround engines. Any node titled “Turnaround · …” belongs to this stage."),
+            );
+            return;
+        }
+        const angles = this.angleList(turnaround);
+        const enabled = angles.filter((angle) => angle.enabled).length;
+        const referenceValue = turnaround.referenceWidget?.value ?? "";
+        const reference = parseAnnotated(referenceValue);
+        const latest = this.latestCharacterRun();
+        const shown = this.selected && this.selected.phase !== "turnaround" ? this.selected : null;
+        const sheet = this.sheets.get(referenceValue) ?? new Map();
+        const library = (this.library ?? []).filter((character) => character.image);
+        const anchor = (id, label) => h("div", { class: "cas-subhead", dataset: { anchor: id } }, label);
+
+        const updateAngle = (index, patch) => this.saveAngleList(turnaround, angles.map((angle, i) => (i === index ? { ...angle, ...patch } : angle)));
+        const cleanLabel = (value, index) => String(value).replace(/[:,\n]/g, " ").trim() || `Angle ${index + 1}`;
+
+        const engineNote = turnaround.active?.key === "krea2"
+            ? "Image-to-image on your phase-1 Krea2 model, LoRAs and Krea2T enhancer. A higher change amount gives more freedom to turn the body, but less likeness."
+            : turnaround.active?.key === "qwen"
+                ? "Instruction edit with Qwen Image 2.1 Turbo: the reference image itself carries the identity. Needs the Qwen 2.1 model files listed in the README."
+                : "";
+        const engineFields = [];
+        for (const node of turnaround.active?.nodes ?? []) {
+            for (const widget of node.widgets ?? []) {
+                const isTemplate = widget.name === "value" && nodeClass(node) === "PrimitiveStringMultiline";
+                const label = isTemplate ? turnaroundRole(node) : TURNAROUND_SETTINGS.get(widget.name);
+                if (!label || isWidgetLinked(node, widget) || widgetKind(node, widget) === "skip") continue;
+                engineFields.push(this.renderField(node, widget, { label, note: isTemplate ? "{placeholders} are filled in per run" : turnaroundRole(node) }));
+            }
+        }
+
+        fill(this.els.main,
+            h("div", { class: "cas-main-head" },
+                h("span", { class: "cas-main-title" }, "Turnaround"),
+                h("span", { class: "cas-main-meta" }, `${enabled} of ${angles.length} angles · ${turnaround.active?.label ?? "no engine"}`),
+                h("div", { class: "cas-spacer" }),
+                h("button", {
+                    class: "cas-btn cas-primary", disabled: this.batchRunning || !enabled,
+                    title: "Queue one run per enabled angle (Ctrl+Enter)",
+                    onclick: () => this.runTurnaround(),
+                }, this.batchRunning ? "Queueing…" : `▶ Generate ${enabled} angle${enabled === 1 ? "" : "s"}`),
+            ),
+            h("p", { class: "cas-hint" }, "Phase 2 renders the character from several angles: one queued run per angle, all from the same reference image and seed. Only the turnaround nodes run; your character pipeline and its seeds are left as they are."),
+
+            anchor("reference", "Reference"),
+            h("div", { class: "cas-ref" },
+                h("div", { class: "cas-ref-img" },
+                    reference
+                        ? h("img", { src: this.viewUrl(reference), alt: "Reference", onerror: (event) => event.target.classList.add("broken") })
+                        : h("span", {}, "No reference yet"),
+                ),
+                h("div", { class: "cas-ref-side" },
+                    h("div", { class: "cas-field-note" }, reference ? `${reference.filename} · ${reference.type}${reference.subfolder ? ` · ${reference.subfolder}` : ""}` : "Pick the character image the angles start from."),
+                    latest && h("button", {
+                        class: "cas-btn", title: "The final image of your most recent character run",
+                        onclick: () => this.useForTurnaround(latest.images[0], latest.texts),
+                    }, "Use latest character image"),
+                    shown && h("button", {
+                        class: "cas-btn", title: "The image currently shown in the right-hand panel",
+                        onclick: () => this.useForTurnaround(shown, shown.texts ?? [...this.texts.values()]),
+                    }, "Use image shown on the right"),
+                    library.length > 0 && h("select", {
+                        class: "cas-select",
+                        onchange: (event) => this.useCharacterForTurnaround(library.find((character) => character.id === event.target.value)),
+                    }, h("option", { value: "" }, "Saved character…"), library.map((character) => h("option", { value: character.id }, character.name))),
+                ),
+            ),
+            turnaround.characterWidget && this.renderField(turnaround.character, turnaround.characterWidget, {
+                label: "Character description",
+                note: "Krea2 i2i prompt; filled from the reference's resolved prompt",
+            }),
+
+            anchor("engine", "Engine"),
+            h("div", { class: "cas-chips cas-engines" }, turnaround.engines.map((engine) => h("button", {
+                class: `cas-chip${turnaround.active === engine ? " on" : ""}`,
+                title: `Use ${engine.label} for this phase (the other engine's output is muted)`,
+                onclick: () => this.setEngine(engine),
+            }, engine.label))),
+            engineNote && h("p", { class: "cas-hint" }, engineNote),
+            engineFields,
+
+            anchor("angles", "Angles"),
+            h("div", { class: "cas-angles" }, angles.map((angle, index) => h("div", { class: `cas-angle${angle.enabled ? "" : " off"}` },
+                h("button", {
+                    class: `cas-chip${angle.enabled ? " on" : ""}`, title: "Include this angle in the next run",
+                    onclick: () => updateAngle(index, { enabled: !angle.enabled }),
+                }, angle.enabled ? "On" : "Off"),
+                h("input", {
+                    class: "cas-text cas-angle-label", value: angle.label, title: "Label used for the result",
+                    onchange: (event) => updateAngle(index, { label: cleanLabel(event.target.value, index) }),
+                }),
+                h("input", {
+                    class: "cas-text", value: angle.prompt, title: "What this angle should show",
+                    onchange: (event) => updateAngle(index, { prompt: event.target.value.replace(/\n/g, " ").trim() }),
+                }),
+                h("button", {
+                    class: "cas-icon-btn", title: "Remove this angle",
+                    onclick: () => this.saveAngleList(turnaround, angles.filter((_, i) => i !== index)),
+                }, "✕"),
+            ))),
+            turnaround.angleListWidget && h("button", {
+                class: "cas-btn cas-add",
+                onclick: () => this.saveAngleList(turnaround, [...angles, { enabled: true, label: `Angle ${angles.length + 1}`, prompt: "" }]),
+            }, "+ Add angle"),
+
+            anchor("results", "Results for this reference"),
+            sheet.size || angles.length
+                ? h("div", { class: "cas-sheet" }, [...new Set([...angles.map((angle) => angle.label), ...sheet.keys()])].map((label) => {
+                    const entry = sheet.get(label);
+                    return h("button", {
+                        class: `cas-sheet-item${entry ? "" : " empty"}${this.selected?.url && this.selected.url === entry?.url ? " on" : ""}`,
+                        disabled: !entry,
+                        onclick: () => {
+                            this.selected = { ...entry, title: `${label}${entry.engine ? ` · ${entry.engine}` : ""}`, phase: "turnaround" };
+                            this.renderSide();
+                            this.renderMain();
+                        },
+                    },
+                    entry ? h("img", { src: entry.url, alt: label, loading: "lazy", onerror: (event) => event.target.classList.add("broken") }) : h("div", { class: "cas-sheet-empty" }, "not generated"),
+                    h("span", {}, label, entry?.engine ? ` · ${entry.engine}` : ""));
+                }))
+                : h("p", { class: "cas-muted" }, "No results yet."),
         );
     }
 
@@ -1073,7 +1408,8 @@ export class CharacterStudio {
             this.app.graph?.setDirtyCanvas?.(true, true);
             this.app.canvas?.setDirty?.(true, true);
             // Marks the workflow as modified and records an undo step in ComfyUI.
-            this.app.extensionManager?.workflow?.activeWorkflow?.changeTracker?.checkState?.();
+            const tracker = this.app.extensionManager?.workflow?.activeWorkflow?.changeTracker;
+            (tracker?.captureCanvasState ?? tracker?.checkState)?.call(tracker);
         } catch (error) {
             console.warn("[Character Studio] could not notify the workflow of changes", error);
         }
@@ -1209,12 +1545,12 @@ export class CharacterStudio {
         const graph = node.graph;
         try {
             if (canvas.graph !== graph) {
-                if (graph === this.app.graph) canvas.setGraph?.(graph);
-                else if (typeof canvas.openSubgraph === "function") canvas.openSubgraph(graph);
+                // Enter each subgraph level from the root so ComfyUI's breadcrumb matches.
+                if (canvas.graph !== this.app.graph) canvas.setGraph(this.app.graph);
+                for (const host of findHostChain(this.app.graph, graph)) canvas.openSubgraph(host.subgraph, host);
             }
-            if (typeof canvas.deselectAll === "function") canvas.deselectAll();
-            if (typeof canvas.select === "function") canvas.select(node);
-            else canvas.selectNode?.(node, false);
+            canvas.deselectAll?.();
+            canvas.selectNode?.(node, false);
             if (typeof canvas.centerOnNode === "function") canvas.centerOnNode(node);
             else if (canvas.ds && canvas.canvas) {
                 const scale = canvas.ds.scale || 1;
@@ -1272,14 +1608,54 @@ export class CharacterStudio {
 
     // ------------------------------------------------------------ queue & events
 
-    async queue() {
-        if (!this.scope) return;
+    // Header button and Ctrl+Enter run whatever the current view is about.
+    queue() {
+        return this.view === "turnaround" ? this.runTurnaround() : this.queuePhase("character", { count: this.batchCount });
+    }
+
+    // Output nodes of one phase, so a run never re-renders the other phase.
+    phaseTargets(phase) {
+        const scope = this.scope;
+        const nodes = phase === "turnaround"
+            ? [this.turnaround()?.active?.save].filter(Boolean)
+            : this.pipelineNodes({ turnaround: false });
+        return nodes
+            .filter((node) => isOutputNode(node) && (node.mode ?? 0) === 0)
+            .map((node) => scope.execIdOf(node))
+            .filter(Boolean);
+    }
+
+    // ComfyUI advances every seed after any queue, even a partial one. Hold
+    // the given nodes' seeds on "fixed" while queueing and restore them after.
+    holdSeedControls(nodes) {
+        const held = [];
+        for (const node of nodes) {
+            for (const widget of node.widgets ?? []) {
+                if (!String(widget?.name).startsWith("control_after_generate") || widget.value === "fixed") continue;
+                held.push([widget, widget.value]);
+                widget.value = "fixed";
+            }
+        }
+        return () => held.forEach(([widget, value]) => { widget.value = value; });
+    }
+
+    async queuePhase(phase, { count = 1, meta = {} } = {}) {
+        if (!this.scope) return false;
         const app = this.app;
         const api = this.api;
+        const scope = this.scope;
         this.run.error = null;
         this.nodeErrors = null;
         this.flushGraphChanged();
-        const count = Math.max(1, Math.min(99, Number(this.batchCount) || 1));
+        const targets = this.phaseTargets(phase);
+        if (!targets.length) {
+            this.run.error = phase === "turnaround"
+                ? "No turnaround engine is active. Pick one under Engine."
+                : "The character pipeline has no active Save Image or Preview node to run.";
+            this.renderSide();
+            return false;
+        }
+        const release = this.holdSeedControls(phase === "turnaround" ? [...scope.nodes, ...scope.turnaroundNodes] : scope.turnaroundNodes);
         // app.queuePrompt does not return prompt ids; capture them (and the
         // exact inputs that were submitted) while this one call is in flight.
         const hadOwn = Object.prototype.hasOwnProperty.call(api, "queuePrompt");
@@ -1288,24 +1664,88 @@ export class CharacterStudio {
         api.queuePrompt = async function (number, data, ...rest) {
             const response = await original.call(this, number, data, ...rest);
             try {
-                if (response?.prompt_id) studio.ourPrompts.set(response.prompt_id, studio.snapshotFromPrompt(data?.output));
+                if (response?.prompt_id) {
+                    studio.ourPrompts.set(response.prompt_id, {
+                        ...meta,
+                        phase,
+                        snapshot: phase === "character" ? studio.snapshotFromPrompt(data?.output) : null,
+                    });
+                }
             } catch (error) {
                 console.warn("[Character Studio] could not snapshot queued prompt", error);
             }
             return response;
         };
+        let queued = false;
         try {
-            await app.queuePrompt(0, count);
+            queued = (await app.queuePrompt(0, Math.max(1, Math.min(99, Number(count) || 1)), targets)) !== false;
         } catch (error) {
             this.run.error = String(error?.message ?? error);
         } finally {
             if (hadOwn) api.queuePrompt = original;
             else delete api.queuePrompt;
+            release();
         }
         const errors = app.lastNodeErrors;
-        if (errors && Object.keys(errors).length) this.nodeErrors = errors;
+        if (errors && Object.keys(errors).length) {
+            this.nodeErrors = errors;
+            queued = false;
+        }
         this.renderHeader();
         this.renderSide();
+        return queued && !this.run.error;
+    }
+
+    // One queued prompt per enabled angle, all from the same reference and seed.
+    async runTurnaround() {
+        const turnaround = this.turnaround();
+        const fail = (message) => {
+            this.run.error = message;
+            this.renderSide();
+            this.renderMain();
+            return false;
+        };
+        if (!turnaround) return fail("This workflow has no Turnaround nodes. Load workflows/character_architect_krea2.json.");
+        if (!turnaround.active) return fail("No turnaround engine is active. Pick one under Engine.");
+        if (!turnaround.angleWidget) return fail("The workflow is missing its “Turnaround · Angle” node.");
+        const reference = turnaround.referenceWidget?.value;
+        if (!parseAnnotated(reference)) return fail("Pick a reference image first.");
+        const angles = this.angleList(turnaround).filter((angle) => angle.enabled);
+        if (!angles.length) return fail("Enable at least one angle.");
+
+        const previous = turnaround.angleWidget.value;
+        this.batchRunning = true;
+        this.renderHeader();
+        try {
+            for (const angle of angles) {
+                this.setValue(turnaround.angle, turnaround.angleWidget, angle.prompt, { record: false });
+                const ok = await this.queuePhase("turnaround", {
+                    meta: { angle: angle.label, engine: turnaround.active.label, reference },
+                });
+                if (!ok) break;
+            }
+        } finally {
+            this.setValue(turnaround.angle, turnaround.angleWidget, previous, { record: false });
+            this.batchRunning = false;
+        }
+        // The seed was held during the batch so every angle shares it; advance it once now.
+        this.applySeedControlOnce(turnaround.seedControl);
+        this.renderAll();
+        return true;
+    }
+
+    applySeedControlOnce(control) {
+        if (!control?.control) return;
+        const mode = control.control.value;
+        const current = Number(control.widget.value) || 0;
+        let next;
+        if (mode === "randomize") next = randomSeed();
+        else if (mode === "increment" || mode === "increment-wrap") next = current + 1;
+        else if (mode === "decrement") next = current - 1;
+        if (next === undefined) return;
+        const options = control.widget.options ?? {};
+        next = Math.min(options.max ?? SEED_MAX, Math.max(options.min ?? 0, next));
+        this.setValue(control.node, control.widget, next, { record: false });
     }
 
     async interrupt() {
@@ -1343,9 +1783,12 @@ export class CharacterStudio {
     }
 
     startRun(promptId) {
-        for (const stage of this.stages.values()) stage.stale = true;
-        for (const text of this.texts.values()) text.stale = true;
-        this.current = { promptId, snapshot: this.ourPrompts.get(promptId) ?? null, images: [], startedAt: Date.now() };
+        const info = this.ourPrompts.get(promptId) ?? null;
+        if (info?.phase !== "turnaround") {
+            for (const stage of this.stages.values()) stage.stale = true;
+            for (const text of this.texts.values()) text.stale = true;
+        }
+        this.current = { promptId, info, snapshot: info?.snapshot ?? null, images: [], startedAt: Date.now() };
         this.selected = null;
         if (this.run.live) URL.revokeObjectURL(this.run.live);
         this.run = { running: true, value: 0, max: 0, label: "", live: null, error: null };
@@ -1355,7 +1798,10 @@ export class CharacterStudio {
 
     touch(promptId) {
         const id = promptId ?? this.activePromptId;
-        if (this.current && !this.current.promptId && id) this.current.promptId = id;
+        if (this.current && !this.current.promptId && id) {
+            this.current.promptId = id;
+            this.current.info ??= this.ourPrompts.get(id) ?? null;
+        }
         if (!this.current || !this.isCurrentPrompt(id)) this.startRun(id);
     }
 
@@ -1364,13 +1810,18 @@ export class CharacterStudio {
         return !!this.current && (!promptId || !this.current.promptId || promptId === this.current.promptId);
     }
 
+    runLabel(node) {
+        const angle = this.current?.info?.angle;
+        return angle ? `${angle} · ${nodeTitle(node)}` : nodeTitle(node);
+    }
+
     onExecuting(detail) {
         const id = detail && typeof detail === "object" ? detail.display_node ?? detail.node : detail;
         if (id == null || !this.scope) return;
         const node = this.scope.watch.get(String(id));
         if (!node) return;
         this.touch(detail?.prompt_id);
-        this.run.label = nodeTitle(node);
+        this.run.label = this.runLabel(node);
         this.run.value = 0;
         this.run.max = 0;
         this.renderProgress();
@@ -1379,7 +1830,7 @@ export class CharacterStudio {
     onProgress(detail) {
         if (!this.scope || !this.isCurrentPrompt(detail?.prompt_id)) return;
         const node = detail?.node != null ? this.scope.watch.get(String(detail.node)) : null;
-        if (node) this.run.label = nodeTitle(node);
+        if (node) this.run.label = this.runLabel(node);
         this.run.value = detail?.value ?? 0;
         this.run.max = detail?.max ?? 0;
         this.renderProgress();
@@ -1393,20 +1844,40 @@ export class CharacterStudio {
         this.touch(detail?.prompt_id);
         const output = detail?.output ?? {};
         const order = [...this.scope.watch.keys()].indexOf(execId);
+        const turnaround = this.scope.isTurnaround(node);
         if (Array.isArray(output.images) && output.images.length) {
             const images = output.images.filter((image) => image?.filename).map((image) => {
                 const ref = { filename: image.filename, subfolder: image.subfolder ?? "", type: image.type ?? "output" };
                 return { ref, url: this.viewUrl(ref) };
             });
-            const final = SAVE_NODE.test(nodeClass(node));
-            this.stages.set(execId, { title: nodeTitle(node), images, stale: false, final, order });
-            this.current?.images.push(...images.map((image) => ({ ...image, title: nodeTitle(node), final })));
+            if (turnaround) {
+                const info = this.ourPrompts.get(detail?.prompt_id) ?? this.current?.info ?? {};
+                const angle = info.angle ?? "Angle";
+                const key = info.reference ?? this.turnaround()?.referenceWidget?.value ?? "";
+                if (images.length) this.sheetFor(key).set(angle, { ...images[0], engine: info.engine ?? "", time: Date.now() });
+                this.current?.images.push(...images.map((image) => ({ ...image, title: `${angle}${info.engine ? ` · ${info.engine}` : ""}`, final: true })));
+                if (this.view === "turnaround") this.renderMain();
+            } else {
+                const final = SAVE_NODE.test(nodeClass(node));
+                this.stages.set(execId, { title: nodeTitle(node), images, stale: false, final, order });
+                this.current?.images.push(...images.map((image) => ({ ...image, title: nodeTitle(node), final })));
+            }
         }
         const text = output.text ?? output.string;
-        if (Array.isArray(text) && text.length) {
-            this.texts.set(execId, { title: nodeTitle(node), text: text.map(String).join("\n"), stale: false, order });
+        if (!turnaround && Array.isArray(text) && text.length) {
+            this.texts.set(execId, {
+                title: nodeTitle(node), text: text.map(String).join("\n"), stale: false, order,
+                fromCharacter: this.readsCharacterNode(node),
+            });
         }
         this.renderSideSoon();
+    }
+
+    // True when a display node is wired straight to the Character Architect output.
+    readsCharacterNode(node) {
+        const input = (node.inputs ?? []).find((slot) => slot?.link != null);
+        const link = input ? getLink(node.graph, input.link) : null;
+        return !!link && getNodeById(node.graph, link.origin_id) === this.scope.cpf;
     }
 
     onExecutionEnd(detail, error) {
@@ -1422,11 +1893,13 @@ export class CharacterStudio {
         const finals = current.images.filter((image) => image.final);
         const images = finals.length ? finals : current.images.slice(-1);
         if (images.length) {
+            const turnaround = current.info?.phase === "turnaround";
             this.history.unshift({
                 id: newId(),
                 time: Date.now(),
+                phase: turnaround ? "turnaround" : "character",
                 images,
-                texts: [...this.texts.values()].filter((text) => !text.stale).map(({ title, text }) => ({ title, text })),
+                texts: turnaround ? [] : [...this.texts.values()].filter((text) => !text.stale).map(({ title, text, fromCharacter }) => ({ title, text, fromCharacter })),
                 snapshot: current.snapshot,
             });
             this.history.length = Math.min(this.history.length, HISTORY_LIMIT);
@@ -1434,6 +1907,7 @@ export class CharacterStudio {
         this.ourPrompts.delete(current.promptId);
         this.renderHeader();
         this.renderSide();
+        if (this.view === "turnaround") this.renderMain();
     }
 
     onPreview(blob, meta) {
@@ -1537,6 +2011,21 @@ export class CharacterStudio {
 
     currentImage() {
         if (this.selected) return this.selected;
+        if (this.view === "turnaround") {
+            const sheet = this.sheets.get(this.turnaround()?.referenceWidget?.value ?? "");
+            const [angle, entry] = [...(sheet ?? new Map())].sort((a, b) => b[1].time - a[1].time)[0] ?? [];
+            if (entry) return { ...entry, title: `${angle}${entry.engine ? ` · ${entry.engine}` : ""}`, phase: "turnaround" };
+        }
+        return this.latestStageImage();
+    }
+
+    // The image a saved character points at: never a turnaround angle.
+    characterImage() {
+        if (this.selected && this.selected.phase !== "turnaround") return this.selected;
+        return this.latestStageImage();
+    }
+
+    latestStageImage() {
         const stages = [...this.stages.values()].sort((a, b) => a.order - b.order);
         const final = [...stages].reverse().find((stage) => stage.final && stage.images.length) ?? stages.at(-1);
         const image = final?.images?.[0];
@@ -1581,6 +2070,11 @@ export class CharacterStudio {
                     this.toast("success", "Character Studio", `Restored ${applied} settings${skipped ? `, skipped ${skipped} unknown` : ""}. Seeds set to Fixed.`);
                 },
             }, "Use these settings"),
+            image && !live && image.ref && image.phase !== "turnaround" && this.scope.turnaroundNodes.length > 0 && h("button", {
+                class: "cas-btn cas-wide",
+                title: "Make this image the turnaround reference and open the Turnaround stage",
+                onclick: () => this.useForTurnaround(image, this.selected?.texts ?? [...this.texts.values()]),
+            }, "→ Use for turnaround"),
 
             stages.length > 0 && h("div", { class: "cas-side-block" },
                 h("div", { class: "cas-side-title" }, "Stages"),
@@ -1624,7 +2118,7 @@ export class CharacterStudio {
                     title: formatTime(item.time),
                     onclick: () => {
                         const first = item.images[0];
-                        this.selected = { ...first, title: `${first.title} · ${formatTime(item.time)}`, snapshot: item.snapshot, historyId: item.id, texts: item.texts };
+                        this.selected = { ...first, title: `${first.title} · ${formatTime(item.time)}`, snapshot: item.snapshot, historyId: item.id, texts: item.texts, phase: item.phase };
                         this.renderSide();
                     },
                 }, h("img", { src: item.images[0].url, alt: "", loading: "lazy" })))),
@@ -1647,7 +2141,7 @@ export class CharacterStudio {
     }
 
     renderSaveBlock(snapshot) {
-        const image = this.currentImage();
+        const image = this.characterImage();
         return h("div", { class: "cas-side-block" },
             h("div", { class: "cas-side-title" }, "Save character"),
             h("div", { class: "cas-save" },
@@ -1680,9 +2174,14 @@ export class CharacterStudio {
                             : h("div", { class: "cas-char-noimg" }, "—"),
                         h("div", { class: "cas-char-info" },
                             h("span", { class: "cas-char-name" }, character.name),
-                            h("span", { class: "cas-muted" }, formatTime(character.created)),
+                            h("span", { class: "cas-muted" }, formatTime(character.created),
+                                character.turnaround?.length ? ` · ${character.turnaround.length} angles` : ""),
                         ),
                         h("button", { class: "cas-btn", title: "Load these settings and seeds onto the node", onclick: () => this.loadCharacter(character) }, "Load"),
+                        character.image && this.scope.turnaroundNodes.length > 0 && h("button", {
+                            class: "cas-icon-btn", title: "Use this character as the turnaround reference",
+                            onclick: () => this.useCharacterForTurnaround(character),
+                        }, "→"),
                         h("button", { class: "cas-icon-btn", title: "Delete", onclick: () => this.deleteCharacter(character) }, "✕"),
                     )))
                     : h("p", { class: "cas-muted" }, "Saved characters live in ComfyUI's user folder and are available in every workflow."),
@@ -1701,7 +2200,8 @@ export class CharacterStudio {
             } else {
                 const data = await response.json();
                 this.library = (Array.isArray(data?.characters) ? data.characters : []).filter((character) =>
-                    character && typeof character.name === "string" && character.values && typeof character.values === "object");
+                    character && typeof character.name === "string" && character.values && typeof character.values === "object")
+                    .map((character) => ({ ...character, image: isSafeRef(character.image) ? character.image : null }));
             }
             this.libraryError = null;
         } catch (error) {
@@ -1728,9 +2228,11 @@ export class CharacterStudio {
         const name = this.saveName.trim() || `Character ${this.library.length + 1}`;
         const existing = this.library.find((character) => character.name === name);
         if (existing && !window.confirm(`Replace the saved character “${name}”?`)) return;
-        const snapshot = this.selected?.snapshot ?? this.history.find((item) => item.snapshot)?.snapshot ?? this.liveSnapshot();
-        const image = this.currentImage();
-        const texts = this.selected?.texts ?? [...this.texts.values()].filter((text) => !text.stale);
+        const image = this.characterImage();
+        const selected = this.selected?.phase !== "turnaround" ? this.selected : null;
+        const snapshot = selected?.snapshot ?? this.history.find((item) => item.snapshot)?.snapshot ?? this.liveSnapshot();
+        const texts = selected?.texts ?? [...this.texts.values()].filter((text) => !text.stale);
+        const sheet = image?.ref ? this.sheets.get(annotate(image.ref)) : null;
         const entry = {
             id: existing?.id ?? newId(),
             name,
@@ -1738,7 +2240,9 @@ export class CharacterStudio {
             values: snapshot.values,
             seeds: snapshot.seeds,
             prompt: texts.map((text) => text.text).join("\n\n"),
+            description: characterText(texts),
             image: image?.ref ?? null,
+            turnaround: [...(sheet ?? new Map())].map(([angle, item]) => ({ angle, engine: item.engine ?? "", image: item.ref })),
         };
         this.library = [entry, ...this.library.filter((character) => character !== existing)];
         if (await this.persistLibrary()) {

@@ -297,3 +297,17 @@ export function humanize(name) {
     const text = String(name ?? "").replace(/[_.]+/g, " ").replace(/\s+/g, " ").trim();
     return text ? text[0].toUpperCase() + text.slice(1) : "";
 }
+
+// Phase 2: nodes titled "Turnaround · …" form the turnaround stage.
+export const TURNAROUND_ROLE = { id: "turnaround", label: "Turnaround (phase 2)" };
+
+// Engine settings surfaced in the Turnaround view, by widget name.
+export const TURNAROUND_SETTINGS = new Map([
+    ["denoise", "Change amount"],
+    ["megapixels", "Working size (MP)"],
+    ["resolution", "Reference size"],
+    ["steps", "Steps"],
+    ["unet_name", "Model"],
+    ["clip_name", "Text encoder"],
+    ["vae_name", "VAE"],
+]);

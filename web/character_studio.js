@@ -114,14 +114,17 @@ app.registerExtension({
         studio.attachEvents();
         api.addEventListener("graphChanged", scheduleLauncherScan);
         try {
-            app.extensionManager?.registerSidebarTab?.({
+            const tab = {
                 id: "character-architect-studio",
                 icon: "pi pi-user-edit",
                 title: "Character Studio",
                 tooltip: "Character Architect Studio",
                 type: "custom",
                 render: renderSidebar,
-            });
+            };
+            const manager = app.extensionManager;
+            if (manager?.sidebarTab?.registerSidebarTab) manager.sidebarTab.registerSidebarTab(tab);
+            else manager?.registerSidebarTab?.(tab);
         } catch (error) {
             console.warn("[Character Studio] sidebar tab unavailable", error);
         }

@@ -175,17 +175,25 @@ export function resolveScope(rootGraph, target) {
         }
     }
     const hostPath = hostChain.map((node) => String(node.id));
-    const nodes = topoSort(inRoot ? connectedComponent(cpf) : [...graphNodes(graph)]);
+    const candidates = inRoot ? connectedComponent(cpf) : [...graphNodes(graph)];
+
+    // Phase 2 lives in the same graph: every node titled "Turnaround …" and
+    // everything that only exists downstream of those nodes.
+    const turnaround = new Set();
+    for (const node of graphNodes(graph)) {
+        if (isTurnaroundNode(node)) connectedComponent(node, "down").forEach((item) => turnaround.add(item));
+    }
 
     // Execution ids as reported by the server: "<host>:<host>:<node>".
     const watch = new Map();
-    for (const node of nodes) watch.set([...hostPath, String(node.id)].join(":"), node);
-    // Display nodes wired to the subgraph outputs live in the parent graphs.
+    for (const node of [...candidates, ...turnaround]) watch.set([...hostPath, String(node.id)].join(":"), node);
+    // Display and save nodes wired to the subgraph outputs live in the parent graphs.
     hostChain.forEach((host, index) => {
         const parentPath = hostPath.slice(0, index);
         for (const node of connectedComponent(host, "down")) {
             if (node === host) continue;
             watch.set([...parentPath, String(node.id)].join(":"), node);
+            if (isTurnaroundNode(node)) turnaround.add(node);
         }
     });
 
@@ -196,11 +204,23 @@ export function resolveScope(rootGraph, target) {
         host: hostChain[0] ?? null,
         hostChain,
         hostPath,
-        nodes,
+        nodes: topoSort(candidates.filter((node) => !turnaround.has(node))),
+        turnaroundNodes: topoSort([...turnaround]),
+        isTurnaround: (node) => turnaround.has(node),
         watch,
         execIdOf(node) {
             for (const [id, candidate] of watch) if (candidate === node) return id;
             return null;
         },
     };
+}
+
+export function isTurnaroundNode(node) {
+    return /^Turnaround\b/i.test(String(node?.title ?? ""));
+}
+
+export function isOutputNode(node) {
+    const data = node?.constructor?.nodeData;
+    if (data && "output_node" in data) return !!data.output_node;
+    return /^(SaveImage|PreviewImage|PreviewAny)$|ShowText|Save.*Image/i.test(nodeClass(node));
 }

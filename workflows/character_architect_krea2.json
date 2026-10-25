@@ -702,5 +702,426 @@
     "_meta": {
       "title": "LatentMultiply"
     }
+  },
+  "500": {
+    "inputs": {
+      "image": ""
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Turnaround · Reference"
+    }
+  },
+  "501": {
+    "inputs": {
+      "value": ""
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Turnaround · Character"
+    }
+  },
+  "502": {
+    "inputs": {
+      "value": "front view, full body, standing straight and facing the camera, arms relaxed at the sides"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Turnaround · Angle"
+    }
+  },
+  "503": {
+    "inputs": {
+      "value": "Front: front view, full body, standing straight and facing the camera, arms relaxed at the sides\nThree-quarter: three-quarter view from the front left, full body, standing, body turned 45 degrees away from the camera\nSide: left side profile view, full body, standing, body turned 90 degrees so the camera sees the left side\nBack: back view, full body, standing and facing directly away from the camera\nFace: close-up portrait of the face, front view, head and shoulders, neutral expression"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Turnaround · Angle list"
+    }
+  },
+  "504": {
+    "inputs": {
+      "seed": 20261025
+    },
+    "class_type": "easy seed",
+    "_meta": {
+      "title": "Turnaround · Seed"
+    }
+  },
+  "510": {
+    "inputs": {
+      "value": "{angle}. {character}"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Turnaround · Krea2 prompt template"
+    }
+  },
+  "511": {
+    "inputs": {
+      "string": [
+        "510",
+        0
+      ],
+      "find": "{angle}",
+      "replace": [
+        "502",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Turnaround · Krea2 insert angle"
+    }
+  },
+  "512": {
+    "inputs": {
+      "string": [
+        "511",
+        0
+      ],
+      "find": "{character}",
+      "replace": [
+        "501",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Turnaround · Krea2 insert character"
+    }
+  },
+  "513": {
+    "inputs": {
+      "text": [
+        "512",
+        0
+      ],
+      "clip": [
+        "56",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Turnaround · Krea2 encode prompt"
+    }
+  },
+  "514": {
+    "inputs": {
+      "preset": "uniform",
+      "per_layer_weights": "1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.5, 5.0, 1.1, 4.0, 1.0",
+      "multiplier": 2,
+      "renormalize": true,
+      "conditioning": [
+        "513",
+        0
+      ]
+    },
+    "class_type": "ConditioningKrea2Rebalance",
+    "_meta": {
+      "title": "Turnaround · Krea2 conditioning"
+    }
+  },
+  "515": {
+    "inputs": {
+      "image": [
+        "500",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "megapixels": 1.0,
+      "resolution_steps": 16
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Turnaround · Krea2 resize reference"
+    }
+  },
+  "516": {
+    "inputs": {
+      "pixels": [
+        "515",
+        0
+      ],
+      "vae": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "Turnaround · Krea2 encode reference"
+    }
+  },
+  "517": {
+    "inputs": {
+      "eta": 0.66,
+      "sampler_name": "exponential/ddim",
+      "scheduler": "ddim_uniform",
+      "steps": 11,
+      "steps_to_run": -1,
+      "denoise": 0.75,
+      "cfg": 1,
+      "seed": [
+        "504",
+        0
+      ],
+      "sampler_mode": "standard",
+      "bongmath": true,
+      "model": [
+        "367",
+        0
+      ],
+      "positive": [
+        "514",
+        0
+      ],
+      "negative": [
+        "360",
+        0
+      ],
+      "latent_image": [
+        "516",
+        0
+      ]
+    },
+    "class_type": "ClownsharKSampler_Beta",
+    "_meta": {
+      "title": "Turnaround · Krea2 i2i sampler"
+    }
+  },
+  "518": {
+    "inputs": {
+      "samples": [
+        "517",
+        1
+      ],
+      "vae": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Turnaround · Krea2 decode"
+    }
+  },
+  "519": {
+    "inputs": {
+      "filename_prefix": "CharacterArchitect/turnaround/krea2",
+      "images": [
+        "518",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Turnaround · Krea2 i2i · Save"
+    }
+  },
+  "530": {
+    "inputs": {
+      "unet_name": "qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 model"
+    }
+  },
+  "531": {
+    "inputs": {
+      "model": [
+        "530",
+        0
+      ],
+      "device": "auto",
+      "dtype": "default"
+    },
+    "class_type": "QwenImage21Cache",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 cache"
+    }
+  },
+  "532": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 text encoder"
+    }
+  },
+  "533": {
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 VAE"
+    }
+  },
+  "534": {
+    "inputs": {
+      "value": "Show this exact same person from a new camera angle: {angle}. Keep the face and identity, body shape, skin, hairstyle, outfit and accessories exactly the same, in the same photographic style, on a plain light-grey studio background."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 instruction"
+    }
+  },
+  "535": {
+    "inputs": {
+      "string": [
+        "534",
+        0
+      ],
+      "find": "{angle}",
+      "replace": [
+        "502",
+        0
+      ]
+    },
+    "class_type": "StringReplace",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 insert angle"
+    }
+  },
+  "536": {
+    "inputs": {
+      "clip": [
+        "532",
+        0
+      ],
+      "prompt": [
+        "535",
+        0
+      ],
+      "negative_prompt": "",
+      "vae": [
+        "533",
+        0
+      ],
+      "resolution": 1024,
+      "images.image_1": [
+        "500",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImage21",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 encode"
+    }
+  },
+  "537": {
+    "inputs": {
+      "model": [
+        "531",
+        0
+      ],
+      "positive": [
+        "536",
+        0
+      ],
+      "negative": [
+        "536",
+        1
+      ],
+      "cfg": 1
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 guider"
+    }
+  },
+  "538": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 sampler"
+    }
+  },
+  "539": {
+    "inputs": {
+      "sigmas": "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 Turbo 8-step schedule"
+    }
+  },
+  "540": {
+    "inputs": {
+      "noise_seed": [
+        "504",
+        0
+      ]
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 noise"
+    }
+  },
+  "541": {
+    "inputs": {
+      "noise": [
+        "540",
+        0
+      ],
+      "guider": [
+        "537",
+        0
+      ],
+      "sampler": [
+        "538",
+        0
+      ],
+      "sigmas": [
+        "539",
+        0
+      ],
+      "latent_image": [
+        "536",
+        2
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 sample"
+    }
+  },
+  "542": {
+    "inputs": {
+      "samples": [
+        "541",
+        0
+      ],
+      "vae": [
+        "533",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 decode"
+    }
+  },
+  "543": {
+    "inputs": {
+      "filename_prefix": "CharacterArchitect/turnaround/qwen21",
+      "images": [
+        "542",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Turnaround · Qwen 2.1 edit · Save"
+    }
   }
 }
