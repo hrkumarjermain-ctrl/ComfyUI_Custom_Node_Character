@@ -940,7 +940,7 @@ export class CharacterStudio {
         if (!turnaround) {
             fill(this.els.main,
                 h("div", { class: "cas-main-head" }, h("span", { class: "cas-main-title" }, "Turnaround")),
-                h("p", { class: "cas-hint" }, "This workflow has no Turnaround nodes. Load workflows/character_architect_krea2.json from this repository: it contains the character pipeline and both turnaround engines. Any node titled “Turnaround · …” belongs to this stage."),
+                h("p", { class: "cas-hint" }, "This workflow has no Turnaround nodes. Load ComfyUI-Character-Studio/workflows/character_architect_krea2.json: it contains the character pipeline and both turnaround engines. Any node titled “Turnaround · …” belongs to this stage."),
             );
             return;
         }
@@ -1705,7 +1705,7 @@ export class CharacterStudio {
             this.renderMain();
             return false;
         };
-        if (!turnaround) return fail("This workflow has no Turnaround nodes. Load workflows/character_architect_krea2.json.");
+        if (!turnaround) return fail("This workflow has no Turnaround nodes. Load ComfyUI-Character-Studio/workflows/character_architect_krea2.json.");
         if (!turnaround.active) return fail("No turnaround engine is active. Pick one under Engine.");
         if (!turnaround.angleWidget) return fail("The workflow is missing its “Turnaround · Angle” node.");
         const reference = turnaround.referenceWidget?.value;

@@ -22,8 +22,8 @@ pipeline. That means:
 
 ## The workflow
 
-`workflows/character_architect_krea2.json` (API format; drag it onto the ComfyUI canvas
-to load it). It holds both phases.
+`ComfyUI-Character-Studio/workflows/character_architect_krea2.json` (API format; drag it
+onto the ComfyUI canvas to load it). It holds both phases.
 
 **Phase 1 · Character (Krea2):** base sampler → chain resample → upscale → detail pass →
 post-processing.
@@ -56,12 +56,24 @@ pipeline contains, so a different model pipeline works without changes to the St
 
 ## Install
 
+Everything ComfyUI needs is in the **`ComfyUI-Character-Studio`** folder. Copy that one
+folder into `ComfyUI/custom_nodes/`, so you end up with
+`ComfyUI/custom_nodes/ComfyUI-Character-Studio/__init__.py`. Then restart ComfyUI and
+reload the browser tab.
+
+From a terminal (macOS / Linux):
+
 ```bash
-cd ComfyUI/custom_nodes
 git clone https://github.com/hrkumarjermain-ctrl/ComfyUI_Custom_Node_Character.git
+cp -r ComfyUI_Custom_Node_Character/ComfyUI-Character-Studio /path/to/ComfyUI/custom_nodes/
 ```
 
-Restart ComfyUI and reload the browser tab.
+To update later, replace that folder with the new one. Do not copy the whole repository
+into `custom_nodes`: only the `ComfyUI-Character-Studio` folder is a node pack.
+
+Check it loaded: the browser console (F12) shows no `[Character Studio]` errors, the left
+sidebar has a **Character Studio** tab, and the Character Architect node has a
+**🎭 Open Character Studio** button.
 
 ## Opening the Studio
 
@@ -176,16 +188,17 @@ reference.
 ## Repository layout
 
 ```
-__init__.py                     registers ./web, adds no nodes
-web/character_studio.js         entry: buttons, menus, sidebar tab, commands
-web/cs_studio.js                the Studio overlay
-web/cs_graph.js                 graph helpers (scope, links, subgraphs)
-web/cs_constants.js             section layout and the node's random / lock rules
-web/cs_dom.js                   small DOM builder
-web/character_studio.css        styles
-workflows/                      the Krea2 workflow with both phases
-Character Architect UI design/  original design mock
-character_architect_v17.text    reference copy of the node's own frontend
+ComfyUI-Character-Studio/            ← the folder that goes into ComfyUI/custom_nodes
+  __init__.py                        registers ./web, adds no nodes
+  web/character_studio.js            entry: buttons, menus, sidebar tab, commands
+  web/cs_studio.js                   the Studio overlay
+  web/cs_graph.js                    graph helpers (scope, links, subgraphs)
+  web/cs_constants.js                section layout and the node's random / lock rules
+  web/cs_dom.js                      small DOM builder
+  web/character_studio.css           styles
+  workflows/                         the Krea2 workflow with both phases
+Character Architect UI design/       original design mock (not needed in ComfyUI)
+character_architect_v17.text         reference copy of the node's own frontend (not needed in ComfyUI)
 ```
 
 ## Roadmap
