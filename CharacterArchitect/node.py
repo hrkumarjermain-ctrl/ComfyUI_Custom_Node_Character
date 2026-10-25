@@ -2064,6 +2064,7 @@ OPTIONAL_TOOLTIPS = {
     "pose_text_override": "Optional exact text replacing Pose and Scene scenario while preserving Setting. It can receive a pose description generated from a reference image without adding a vision-model dependency to Character Architect.",
     "face_hair_text_override": "Optional structured face-reference description from Generate Text. Use semicolon-separated key=value pairs for the supported Face and Hair fields. Manual and Forced Random selections remain authoritative per field; this input then leads over Identity Forge, Subject wildcard, and ordinary Random. A valid description suspends the indivisible Subject wildcard and detailed Ethnicity Guidance, while preserving the simple origin category. Face traits stay out of Pre-gen; resolved hair remains included.",
     "custom_color_overrides": "Arbitrary color replacements using target=value pairs separated by semicolons or new lines. Example: top=fuchsia; hosiery=salmon pink; hair=teal. Clothing colors modify only an active garment.",
+    "custom_values": "Your own text for any field the dropdowns do not cover, one field=value per line. Example: origin_age=24 to 26 years old, body_type=1.80 m tall, origin_ethnicity=Ethiopian Amhara. Each line replaces that field exactly as written, after every random, guidance and compatibility rule, like Override text; a connected Override text still has the final word. Later lines for the same field win.",
     "wildcard_subject": "Optional expanded wildcard text replacing the node's subject identity and appearance blocks. Supply already-expanded text or connect a wildcard processor; Character Architect does not require or bundle a wildcard engine.",
     "wildcard_clothing": "Optional expanded wildcard text replacing the node's Clothes and Shoes block. Standalone accessories remain available unless the supplied text includes them.",
     "wildcard_pose": "Optional expanded wildcard text replacing Pose and Scene scenario while preserving the node's Setting.",
@@ -3948,6 +3949,9 @@ FOOTWEAR_LOW_VISIBILITY_POSES = set()
 # A text override on a main garment driver must also make that garment family
 # visible. Merely replacing top_type after Random resolution is insufficient if
 # a resolved dress or franchise cosplay still wins the formatter's priority.
+# Inputs outside the category schema that Custom values may still replace.
+CUSTOM_VALUE_EXTRA_FIELDS = {"eye_focus", "mouth_expression"}
+
 MAIN_CLOTHING_OVERRIDE_CONFLICTS = {
     "top_type": {
         "dress_type", "sleepwear_type", "cosplay_type",
@@ -4889,6 +4893,7 @@ class CharacterArchitectNode:
             "pose_text_override": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False, "tooltip": OPTIONAL_TOOLTIPS["pose_text_override"]}),
             "face_hair_text_override": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False, "tooltip": OPTIONAL_TOOLTIPS["face_hair_text_override"]}),
             "custom_color_overrides": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False, "tooltip": OPTIONAL_TOOLTIPS["custom_color_overrides"]}),
+            "custom_values": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False, "tooltip": OPTIONAL_TOOLTIPS["custom_values"]}),
             "wildcard_subject": ("STRING", {"default": "", "multiline": False, "dynamicPrompts": True, "tooltip": OPTIONAL_TOOLTIPS["wildcard_subject"]}),
             "wildcard_clothing": ("STRING", {"default": "", "multiline": False, "dynamicPrompts": True, "tooltip": OPTIONAL_TOOLTIPS["wildcard_clothing"]}),
             "wildcard_pose": ("STRING", {"default": "", "multiline": False, "dynamicPrompts": True, "tooltip": OPTIONAL_TOOLTIPS["wildcard_pose"]}),
@@ -7007,7 +7012,7 @@ class CharacterArchitectNode:
             ("lip_shape", "{value}"),
             ("facial_hair", "{value}"),
         ]:
-            if key == "eye_color" and ethnicity_guidance and data.get("origin_ethnicity"):
+            if key == "eye_color" and ethnicity_guidance and data.get("origin_ethnicity") in ETHNICITY_PROMPTS:
                 continue
             value = data.get(key)
             if value:
@@ -7139,10 +7144,11 @@ class CharacterArchitectNode:
         ethnicity = data.get("origin_ethnicity")
         if not ethnicity:
             return None
-        if ethnicity_guidance:
-            template = ETHNICITY_PROMPTS.get(ethnicity, ethnicity)
-            return template.format(eye_color=data.get("eye_color") or "brown")
-        return ethnicity
+        template = ETHNICITY_PROMPTS.get(ethnicity) if ethnicity_guidance else None
+        if template is None:
+            # A custom ethnicity is plain text: no anchor template to fill.
+            return ethnicity
+        return template.format(eye_color=data.get("eye_color") or "brown")
 
     def _build_full_prompt(self, data, free_prompt="", free_prompt_position="After introduction", enhance_realism=False, species_mode="Human", ethnicity_guidance=False):
         media_intro, media_style, media_article = self._media_intro_with_effect(data)
@@ -7600,7 +7606,7 @@ class CharacterArchitectNode:
             ("makeup_complexion", "{value}"),
         ]
         for field, template in order:
-            if field == "eye_color" and ethnicity_guidance and data.get("origin_ethnicity"):
+            if field == "eye_color" and ethnicity_guidance and data.get("origin_ethnicity") in ETHNICITY_PROMPTS:
                 continue
             value = data.get(field)
             if value:
@@ -7752,7 +7758,7 @@ class CharacterArchitectNode:
         ]
 
         for key, template in face_order:
-            if key == "eye_color" and ethnicity_guidance and data.get("origin_ethnicity"):
+            if key == "eye_color" and ethnicity_guidance and data.get("origin_ethnicity") in ETHNICITY_PROMPTS:
                 continue
             value = data.get(key)
             if value and value not in skip_values:
@@ -7765,6 +7771,50 @@ class CharacterArchitectNode:
     @staticmethod
     def _external_text(value):
         return str(value or "").strip().strip(",")
+
+    @staticmethod
+    def _parse_custom_values(text):
+        """Parse ``field=value`` lines into exact replacements for known fields.
+
+        Lines are split on new lines only, so a value may contain commas or
+        semicolons. Unknown fields, empty values and ``#`` comment lines are
+        ignored; a later line for the same field wins.
+        """
+        valid_fields = {item["key"] for item in SCHEMA["categories"]} | CUSTOM_VALUE_EXTRA_FIELDS
+        values = {}
+        for line in re.split(r"[\n\r]+", str(text or "")):
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            raw_key, raw_value = line.split("=", 1)
+            field = re.sub(r"[\s-]+", "_", raw_key.strip().casefold())
+            value = raw_value.strip().strip(",").strip()
+            if field in valid_fields and value:
+                values.pop(field, None)
+                values[field] = value
+        return values
+
+    @staticmethod
+    def _apply_exact_override(data, field, text):
+        # Applied after every random, guidance, compatibility, and framing
+        # rule: text supplied by the user is the final authority.
+        for conflicting_field in MAIN_CLOTHING_OVERRIDE_CONFLICTS.get(field, ()):
+            data[conflicting_field] = None
+        if field in IDENTITY_MAIN_CLOTHING_FIELDS:
+            data.pop("_identity_outfit", None)
+        data[field] = text
+        data.setdefault("_explicit_fields", set()).add(field)
+        imported_fields = data.get("_identity_applied_fields")
+        if isinstance(imported_fields, set):
+            imported_fields.discard(field)
+        if field in {"pose", "setting"}:
+            data["scene_scenario"] = None
+        if field in SUBJECT_WILDCARD_CLEAR_FIELDS:
+            data.pop("_external_subject_text", None)
+        if field in IDENTITY_OUTFIT_RANDOM_CLEAR_FIELDS | {"clothing_archetype"}:
+            data.pop("_external_clothing_text", None)
+        if field in PHOTOGRAPHY_WILDCARD_CLEAR_FIELDS:
+            data.pop("_external_photography_text", None)
 
     @staticmethod
     def _parse_custom_color_overrides(text):
@@ -8103,6 +8153,7 @@ class CharacterArchitectNode:
         pose_text_override="",
         face_hair_text_override="",
         custom_color_overrides="",
+        custom_values="",
         wildcard_subject="",
         wildcard_clothing="",
         wildcard_pose="",
@@ -8115,12 +8166,13 @@ class CharacterArchitectNode:
             item["key"]: canonical_display_value(kwargs.get(item["key"], "None"))
             for item in SCHEMA["categories"]
         }
+        custom_fields = self._parse_custom_values(custom_values)
         resolution_kwargs = dict(kwargs)
         if any(self._external_text(value) for value in (
             setting_text_override, pose_text_override, wildcard_pose, wildcard_setting,
         )) or (
             override_field in {"pose", "setting"} and self._external_text(override_text)
-        ):
+        ) or {"pose", "setting"} & custom_fields.keys():
             # A complete Scene scenario would otherwise clear Pose and Setting
             # before these category-specific external inputs can replace it.
             resolution_kwargs["scene_scenario"] = "None"
@@ -8137,6 +8189,7 @@ class CharacterArchitectNode:
                 override_field in COMPOSITION_ARCHETYPE_CONTROL_FIELDS
                 and self._external_text(override_text)
             )
+            or bool(COMPOSITION_ARCHETYPE_CONTROL_FIELDS & custom_fields.keys())
         )
         if composition_external_override:
             resolution_kwargs["composition_archetype"] = "None"
@@ -8183,26 +8236,11 @@ class CharacterArchitectNode:
 
         override_text = (override_text or "").strip().strip(",")
         valid_fields = {item["key"] for item in SCHEMA["categories"]}
+        # Custom values first; the single connected Override text keeps the final word.
+        for field, text in custom_fields.items():
+            self._apply_exact_override(data, field, text)
         if override_field in valid_fields and override_text:
-            # Applied after every random, guidance, compatibility, and framing
-            # rule: a connected string is the user's final authority.
-            for conflicting_field in MAIN_CLOTHING_OVERRIDE_CONFLICTS.get(override_field, ()):
-                data[conflicting_field] = None
-            if override_field in IDENTITY_MAIN_CLOTHING_FIELDS:
-                data.pop("_identity_outfit", None)
-            data[override_field] = override_text
-            data.setdefault("_explicit_fields", set()).add(override_field)
-            imported_fields = data.get("_identity_applied_fields")
-            if isinstance(imported_fields, set):
-                imported_fields.discard(override_field)
-            if override_field in {"pose", "setting"}:
-                data["scene_scenario"] = None
-            if override_field in SUBJECT_WILDCARD_CLEAR_FIELDS:
-                data.pop("_external_subject_text", None)
-            if override_field in IDENTITY_OUTFIT_RANDOM_CLEAR_FIELDS | {"clothing_archetype"}:
-                data.pop("_external_clothing_text", None)
-            if override_field in PHOTOGRAPHY_WILDCARD_CLEAR_FIELDS:
-                data.pop("_external_photography_text", None)
+            self._apply_exact_override(data, override_field, override_text)
         free_prompt = (free_prompt or "").strip().strip(",")
         enhance_realism = is_enabled(enhance_realism)
         effective_ethnicity_guidance = bool(

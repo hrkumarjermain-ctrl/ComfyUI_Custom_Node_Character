@@ -752,7 +752,7 @@ const GROUPS = [
     {
         id: "custom_inputs",
         label: "CUSTOM INPUTS / WILDCARDS",
-        keys: ["face_hair_text_override", "setting_text_override", "pose_text_override", "custom_color_overrides", "wildcard_subject", "wildcard_clothing", "wildcard_pose", "wildcard_setting", "wildcard_photography"],
+        keys: ["face_hair_text_override", "setting_text_override", "pose_text_override", "custom_color_overrides", "custom_values", "wildcard_subject", "wildcard_clothing", "wildcard_pose", "wildcard_setting", "wildcard_photography"],
     },
     {
         id: "override_inspection",
@@ -770,7 +770,7 @@ const SECTION_TOOLTIPS = {
     tattoos_makeup: "Independent tattoo, makeup, and nail controls. Random nails are silently removed when full hand-covering gloves are detected.",
     clothes_shoes: "Main garment families are mutually exclusive for ordinary Random. Neckline is one atomic garment geometry; Neckwear is independent from jewelry. Gender prefixes are visual guidance only and remain grouped female, unisex, then male.",
     accessories: "Optional additions guided by clothing archetypes. Head accessories, glasses, armwear, bags, and scarves stay protected on global random buttons and remain available manually or through their own Random setting.",
-    custom_inputs: "Reference-image captions and expanded wildcard text enter as dependency-free STRING overrides. A structured Face/Hair description fills only fields left on None or Random, above Identity Forge and Subject wildcard but below manual, Forced Random, and the universal field override. Setting/Pose text overrides lead over their matching wildcard line. Custom colors use target=value pairs.",
+    custom_inputs: "Reference-image captions and expanded wildcard text enter as dependency-free STRING overrides. A structured Face/Hair description fills only fields left on None or Random, above Identity Forge and Subject wildcard but below manual, Forced Random, and the universal field override. Setting/Pose text overrides lead over their matching wildcard line. Custom colors use target=value pairs. Custom values give any field your own exact text, one field=value per line.",
     override_inspection: "A connected Override text replaces the selected field after every other rule. Inspect property exposes one final resolved value through the dedicated output for overlays, comparisons, and statistics.",
 };
 
@@ -2222,6 +2222,7 @@ const CUSTOM_WIDGET_LABELS = new Map([
     ["pose_text_override", "pose_text_override"],
     ["face_hair_text_override", "face_hair_text_override"],
     ["custom_color_overrides", "custom_color_overrides"],
+    ["custom_values", "custom_values"],
     ["wildcard_subject", "wildcard_subject"],
     ["wildcard_clothing", "wildcard_clothing"],
     ["wildcard_pose", "wildcard_pose"],
@@ -2307,6 +2308,23 @@ function reorderWidgets(node) {
     node.setDirtyCanvas(true, true);
 }
 
+// Custom values are not part of the positional widgets_values layouts used to
+// restore historical workflows, so they travel in the node properties instead.
+function storeCustomValues(node, data) {
+    const widget = widgetMap(node).get("custom_values");
+    if (!widget) return;
+    const value = String(widget.value ?? "");
+    if (!node.properties) node.properties = {};
+    node.properties.cpf_custom_values = value;
+    data.properties = { ...(data.properties || {}), cpf_custom_values: value };
+}
+
+function restoreCustomValues(node, info) {
+    const saved = info?.properties?.cpf_custom_values;
+    const widget = widgetMap(node).get("custom_values");
+    if (widget && typeof saved === "string") widget.value = saved;
+}
+
 function scheduleReorder(node) {
     if (node._cpfReorderTimer) clearTimeout(node._cpfReorderTimer);
     node._cpfReorderTimer = setTimeout(() => {
@@ -2344,6 +2362,7 @@ app.registerExtension({
 
             const result = originalConfigure?.call(this, cleanInfo);
             restoreValuesByName(this, savedValues);
+            restoreCustomValues(this, info);
             scheduleReorder(this);
             return result;
         };
@@ -2355,6 +2374,7 @@ app.registerExtension({
             // UI sections disappear a few seconds after node creation.
             const data = originalSerialize?.apply(this, arguments) || {};
             data.widgets_values = valuesInOrder(this, CANONICAL_WIDGET_ORDER);
+            storeCustomValues(this, data);
             return data;
         };
     },

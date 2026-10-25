@@ -3,9 +3,16 @@
 A full-screen, button-driven character creator for the **Character Architect** node
 (`CharacterPromptFactory`) and the pipeline around it.
 
+This repository holds two ComfyUI node packs that are installed side by side:
+
+- **`CharacterArchitect/`**: the Character Architect node itself (a local 5.1.1 build by
+  InspectaGadget, MIT licence) with one addition, **custom values**: your own text
+  for any field (see `CharacterArchitect/CHANGELOG-custom-values.md`).
+- **`ComfyUI-Character-Studio/`**: the Studio interface.
+
 The Studio adds **no backend nodes**. It is a frontend extension that reads and writes
-the real widgets of your installed Character Architect node and of every node in its
-pipeline. That means:
+the real widgets of the Character Architect node and of every node in its pipeline.
+That means:
 
 - every option list comes live from your node, so new options appear automatically;
 - the canvas, the subgraph and the Studio always show the same values;
@@ -14,7 +21,8 @@ pipeline. That means:
 ## Requirements
 
 - A recent ComfyUI with subgraph support (2025 or later).
-- The Character Architect node pack installed (this repo does **not** contain it).
+- Nothing else for the two packs themselves: Character Architect is pure Python with
+  no dependencies, the Studio is a frontend extension.
 - For the bundled Krea2 workflow: the custom node packs it uses (ComfyUI Manager's
   *Install Missing Custom Nodes* finds them).
 - For the Qwen 2.1 turnaround engine only: a ComfyUI version with Qwen Image 2.1 support
@@ -56,20 +64,25 @@ pipeline contains, so a different model pipeline works without changes to the St
 
 ## Install
 
-Everything ComfyUI needs is in the **`ComfyUI-Character-Studio`** folder. Copy that one
-folder into `ComfyUI/custom_nodes/`, so you end up with
-`ComfyUI/custom_nodes/ComfyUI-Character-Studio/__init__.py`. Then restart ComfyUI and
-reload the browser tab.
+Copy the two folders **`CharacterArchitect`** and **`ComfyUI-Character-Studio`** into
+`ComfyUI/custom_nodes/`, replacing any Character Architect you already have there. Do
+not copy the whole repository into `custom_nodes`: only these two folders are node
+packs. Then restart ComfyUI and force-refresh the browser (Ctrl+F5).
 
-From a terminal (macOS / Linux):
+Easiest to keep up to date: clone once and link both folders (fish shell; set `comfy` to
+your ComfyUI folder):
 
-```bash
-git clone https://github.com/hrkumarjermain-ctrl/ComfyUI_Custom_Node_Character.git
-cp -r ComfyUI_Custom_Node_Character/ComfyUI-Character-Studio /path/to/ComfyUI/custom_nodes/
+```fish
+set comfy ~/ComfyUI
+git clone -b main https://github.com/hrkumarjermain-ctrl/ComfyUI_Custom_Node_Character.git ~/ComfyUI_Custom_Node_Character
+for pack in CharacterArchitect ComfyUI-Character-Studio
+    rm -rf $comfy/custom_nodes/$pack
+    ln -s ~/ComfyUI_Custom_Node_Character/$pack $comfy/custom_nodes/$pack
+end
 ```
 
-To update later, replace that folder with the new one. Do not copy the whole repository
-into `custom_nodes`: only the `ComfyUI-Character-Studio` folder is a node pack.
+To update later: `git -C ~/ComfyUI_Custom_Node_Character pull --ff-only`, then restart
+ComfyUI and press Ctrl+F5.
 
 Check it loaded: the browser console (F12) shows no `[Character Studio]` errors, the left
 sidebar has a **Character Studio** tab, and the Character Architect node has a
@@ -135,8 +148,9 @@ exactly as written, after every random, guidance and compatibility rule. Picking
 preset again, or ✕, removes it; section *All random / All none / Defaults* clear the
 custom values of the fields they change. The values live in Character Architect's
 `custom_values` input as `field=value` lines, so they are saved with the workflow, with
-saved characters and in each run's settings. This needs a Character Architect version
-with the `custom_values` input; with an older version the chips are shown disabled.
+saved characters and in each run's settings. The `CharacterArchitect` folder in this
+repository has the `custom_values` input; with an older Character Architect the chips are
+shown disabled.
 With a custom ethnicity, Ethnicity guidance has no anchor for that text, so the
 custom text is used as written.
 
@@ -188,9 +202,12 @@ reference.
 
 - **"Character Architect is not installed"** in the Character view, or fields named
   `UNKNOWN_1`, `UNKNOWN_2`, … in *ⓘ Diagnostics*: ComfyUI has no node pack providing
-  `CharacterPromptFactory`, so it loaded the node as a missing-node placeholder. Install
-  or repair the Character Architect node pack, restart ComfyUI and load the workflow
-  again. The start-up log lists packs that failed to import.
+  `CharacterPromptFactory`, so it loaded the node as a missing-node placeholder. Copy
+  or link the `CharacterArchitect` folder from this repository into `custom_nodes`,
+  restart ComfyUI and load the workflow again. The start-up log lists packs that failed
+  to import.
+- **✎ Custom chips are greyed out**: the installed Character Architect has no
+  `custom_values` input yet. Use the `CharacterArchitect` folder from this repository.
 - **Sections are empty for another reason**: open **⚙ Settings → ⓘ Diagnostics**, copy
   the report and share it.
 
@@ -210,7 +227,12 @@ reference.
 ## Repository layout
 
 ```
-ComfyUI-Character-Studio/            ← the folder that goes into ComfyUI/custom_nodes
+CharacterArchitect/                  ← node pack 1: the Character Architect node
+  node.py, __init__.py               the node (5.1.1 + custom values)
+  data/categories.json               the option lists
+  web/character_architect_v17.js     its own canvas interface
+  tests/                             its test suite (python -m unittest discover -s tests)
+ComfyUI-Character-Studio/            ← node pack 2: the Studio
   __init__.py                        registers ./web, adds no nodes
   web/character_studio.js            entry: buttons, menus, sidebar tab, commands
   web/cs_studio.js                   the Studio overlay
@@ -220,8 +242,10 @@ ComfyUI-Character-Studio/            ← the folder that goes into ComfyUI/custo
   web/character_studio.css           styles
   workflows/                         the Krea2 workflow with both phases
 Character Architect UI design/       original design mock (not needed in ComfyUI)
-character_architect_v17.text         reference copy of the node's own frontend (not needed in ComfyUI)
 ```
+
+Character Architect is © 2026 InspectaGadget, MIT licence (`CharacterArchitect/LICENSE`);
+public project: https://github.com/InspectaGadget/ComfyUI-CharacterArchitect.
 
 ## Roadmap
 
