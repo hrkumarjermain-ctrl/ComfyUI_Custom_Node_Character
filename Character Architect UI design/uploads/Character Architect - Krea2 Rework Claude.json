@@ -1,0 +1,722 @@
+{
+  "54": {
+    "inputs": {
+      "samples": [
+        "354",
+        1
+      ],
+      "vae": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "55": {
+    "inputs": {
+      "unet_name": "krea_kroma_v0.3.1_turbo_opd_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "56": {
+    "inputs": {
+      "clip_name": "qwen3vl_4b_int8_convrot.safetensors",
+      "type": "krea2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "57": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "82": {
+    "inputs": {
+      "width": [
+        "83",
+        0
+      ],
+      "height": [
+        "83",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "83": {
+    "inputs": {
+      "aspect_ratio": "3:4 (Portrait Standard)",
+      "megapixels": 0.7,
+      "multiple": 16
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "Resolution Selector"
+    }
+  },
+  "133": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "413",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "185": {
+    "inputs": {
+      "seed": 914400712028435
+    },
+    "class_type": "easy seed",
+    "_meta": {
+      "title": "EasySeed"
+    }
+  },
+  "341": {
+    "inputs": {
+      "images": [
+        "54",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "342": {
+    "inputs": {
+      "eta": 0.5,
+      "sampler_name": "linear/ralston_2s",
+      "scheduler": "simple",
+      "steps": 2,
+      "steps_to_run": -1,
+      "denoise": 0.25,
+      "cfg": 1,
+      "seed": 0,
+      "sampler_mode": "standard",
+      "bongmath": true,
+      "model": [
+        "398",
+        0
+      ],
+      "positive": [
+        "444",
+        0
+      ],
+      "negative": [
+        "360",
+        0
+      ],
+      "latent_image": [
+        "465",
+        0
+      ]
+    },
+    "class_type": "ClownsharKSampler_Beta",
+    "_meta": {
+      "title": "ClownsharKSampler"
+    }
+  },
+  "347": {
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 64,
+      "temporal_overlap": 8,
+      "samples": [
+        "342",
+        1
+      ],
+      "vae": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeTiled",
+    "_meta": {
+      "title": "VAE Decode (Tiled)"
+    }
+  },
+  "354": {
+    "inputs": {
+      "eta": 0.66,
+      "sampler_name": "exponential/ddim",
+      "scheduler": "ddim_uniform",
+      "steps": 11,
+      "steps_to_run": 3,
+      "denoise": 1,
+      "cfg": 1,
+      "seed": [
+        "185",
+        0
+      ],
+      "sampler_mode": "standard",
+      "bongmath": true,
+      "model": [
+        "367",
+        0
+      ],
+      "positive": [
+        "401",
+        0
+      ],
+      "negative": [
+        "360",
+        0
+      ],
+      "latent_image": [
+        "82",
+        0
+      ]
+    },
+    "class_type": "ClownsharKSampler_Beta",
+    "_meta": {
+      "title": "ClownsharKSampler"
+    }
+  },
+  "359": {
+    "inputs": {
+      "text": [
+        "439",
+        0
+      ],
+      "clip": [
+        "56",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "360": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "56",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "365": {
+    "inputs": {
+      "pixels": [
+        "378",
+        0
+      ],
+      "vae": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "367": {
+    "inputs": {
+      "enabled": true,
+      "strength": 1,
+      "text_scale": 2,
+      "debug": false,
+      "model": [
+        "398",
+        0
+      ]
+    },
+    "class_type": "Krea2T-Enhancer-Advanced",
+    "_meta": {
+      "title": "Krea2T Enhancer Advanced"
+    }
+  },
+  "378": {
+    "inputs": {
+      "method": "rcas",
+      "method.strength": 0.13,
+      "image": [
+        "379",
+        0
+      ]
+    },
+    "class_type": "ImageSharpenKJ",
+    "_meta": {
+      "title": "Image Sharpen KJ"
+    }
+  },
+  "379": {
+    "inputs": {
+      "upscale_model": "4x-PBRify_RPLKSRd_V3.pth",
+      "mode": "rescale",
+      "rescale_factor": 2,
+      "resize_width": 1024,
+      "resampling_method": "lanczos",
+      "supersample": "true",
+      "rounding_modulus": 8,
+      "image": [
+        "380",
+        0
+      ]
+    },
+    "class_type": "CR Upscale Image",
+    "_meta": {
+      "title": "🔍 CR Upscale Image"
+    }
+  },
+  "380": {
+    "inputs": {
+      "brightness": 0.03,
+      "contrast": 0.97,
+      "saturation": 0.97,
+      "sharpness": 1,
+      "blur": 0,
+      "gaussian_blur": 0.1,
+      "edge_enhance": 0,
+      "detail_enhance": "false",
+      "image": [
+        "393",
+        0
+      ]
+    },
+    "class_type": "Image Filter Adjustments",
+    "_meta": {
+      "title": "Image Filter Adjustments"
+    }
+  },
+  "391": {
+    "inputs": {
+      "eta": 0.33,
+      "sampler_name": "linear/heun_3s",
+      "steps_to_run": 8,
+      "cfg": 1,
+      "sampler_mode": "resample",
+      "bongmath": true,
+      "model": [
+        "398",
+        0
+      ],
+      "positive": [
+        "444",
+        0
+      ],
+      "negative": [
+        "360",
+        0
+      ],
+      "latent_image": [
+        "354",
+        0
+      ]
+    },
+    "class_type": "ClownsharkChainsampler_Beta",
+    "_meta": {
+      "title": "ClownsharkChainsampler"
+    }
+  },
+  "392": {
+    "inputs": {
+      "images": [
+        "393",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "393": {
+    "inputs": {
+      "samples": [
+        "391",
+        1
+      ],
+      "vae": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "398": {
+    "inputs": {
+      "PowerLoraLoaderHeaderWidget": {
+        "type": "PowerLoraLoaderHeaderWidget"
+      },
+      "lora_1": {
+        "on": true,
+        "lora": "KREA2\\Krea2_TextFusion_Refusal_Reduction.safetensors",
+        "strength": 0.75
+      },
+      "lora_2": {
+        "on": true,
+        "lora": "Krea2-realism-V2.safetensors",
+        "strength": 0.5
+      },
+      "lora_3": {
+        "on": true,
+        "lora": "Krea2-realism-V2.safetensors",
+        "strength": 0.5
+      },
+      "➕ Add Lora": "",
+      "model": [
+        "55",
+        0
+      ],
+      "clip": [
+        "56",
+        0
+      ]
+    },
+    "class_type": "Power Lora Loader (rgthree)",
+    "_meta": {
+      "title": "Power Lora Loader (rgthree)"
+    }
+  },
+  "401": {
+    "inputs": {
+      "preset": "uniform",
+      "per_layer_weights": "1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.5, 5.0, 1.1, 4.0, 1.0",
+      "multiplier": 2,
+      "renormalize": true,
+      "conditioning": [
+        "359",
+        0
+      ]
+    },
+    "class_type": "ConditioningKrea2Rebalance",
+    "_meta": {
+      "title": "🎛️ Krea 2 Conditioning Control"
+    }
+  },
+  "413": {
+    "inputs": {
+      "strength": 0.13,
+      "use_gpu": false,
+      "images": [
+        "416",
+        0
+      ]
+    },
+    "class_type": "FastLaplacianSharpen",
+    "_meta": {
+      "title": "🌀 Fast Laplacian Sharpen"
+    }
+  },
+  "416": {
+    "inputs": {
+      "brightness": -0.01,
+      "contrast": 1.01,
+      "saturation": 0.99,
+      "sharpness": 1,
+      "blur": 0,
+      "gaussian_blur": 0,
+      "edge_enhance": 0,
+      "detail_enhance": "false",
+      "image": [
+        "418",
+        0
+      ]
+    },
+    "class_type": "Image Filter Adjustments",
+    "_meta": {
+      "title": "Image Filter Adjustments"
+    }
+  },
+  "417": {
+    "inputs": {
+      "L": -1,
+      "A": -1,
+      "B": -1,
+      "image": [
+        "347",
+        0
+      ]
+    },
+    "class_type": "LayerColor: LAB",
+    "_meta": {
+      "title": "LayerColor: LAB"
+    }
+  },
+  "418": {
+    "inputs": {
+      "method": "rcas",
+      "method.strength": 0.13,
+      "image": [
+        "417",
+        0
+      ]
+    },
+    "class_type": "ImageSharpenKJ",
+    "_meta": {
+      "title": "Image Sharpen KJ"
+    }
+  },
+  "434": {
+    "inputs": {
+      "media_type": "None",
+      "lock_media_type": true,
+      "gender": "None",
+      "lock_gender": true,
+      "content_rating": "",
+      "lock_content_rating": true,
+      "ethnicity_guidance": true,
+      "enhance_realism": true,
+      "species_mode": "Human",
+      "free_prompt_position": "After introduction",
+      "free_prompt": " ",
+      "seed": [
+        "443",
+        0
+      ],
+      "composition_archetype": "None",
+      "portrait_style": "None",
+      "enforce_portrait_framing": false,
+      "capture_style": "None",
+      "pose": "None",
+      "pose_mood": "None",
+      "setting": "None",
+      "scene_scenario": "None",
+      "camera_direction": "None",
+      "head_direction": "None",
+      "eye_focus": "None",
+      "camera_angle": "None",
+      "shot_composition": "None",
+      "lens_style": "None",
+      "lighting_style": "None",
+      "optical_effect": "None",
+      "body_archetype": "None",
+      "origin_age": "mid thirties",
+      "origin_ethnicity": "afro-caribbean",
+      "body_type": "(unisex) average height",
+      "body_physique": "(unisex) obese physique",
+      "body_feminine_curves": "(female) pronounced hourglass silhouette",
+      "bust": "(female) heavy breasts",
+      "butt_shape": "Random",
+      "thigh_shape": "Random",
+      "body_detail_1": "None",
+      "body_detail_2": "None",
+      "body_detail_3": "None",
+      "body_hair": "None",
+      "skin_finish": "None",
+      "expression": "surprised expression",
+      "mouth_expression": "None",
+      "eye_expression": "intense",
+      "face_shape": "Random",
+      "jawline": "Random",
+      "chin_shape": "Random",
+      "eye_shape": "Random",
+      "eye_color": "Random",
+      "eyelashes": "Random",
+      "eyebrows": "Random",
+      "nose_shape": "Random",
+      "lip_shape": "Random",
+      "facial_hair": "None",
+      "hair_color": "Random",
+      "hair_texture": "Random",
+      "hair_style": "Random",
+      "hair_cut": "Random",
+      "hair_length": "Random",
+      "bangs_style": "Random",
+      "tattoo_style": "Random",
+      "makeup_eye": "Random",
+      "makeup_lips": "Random",
+      "nail_style": "Random",
+      "makeup_complexion": "None",
+      "clothing_archetype": "None",
+      "neckline": "None",
+      "neckwear": "None",
+      "top_type": "Random",
+      "sleeve_length": "None",
+      "top_color": "Random",
+      "bottom_type": "Random",
+      "bottom_length": "Random",
+      "bottom_color": "Random",
+      "lingerie_type": "Random",
+      "lingerie_color": "Random",
+      "sleepwear_type": "Random",
+      "sleepwear_color": "Random",
+      "cosplay_type": "Random",
+      "cosplay_color": "Random",
+      "cosplay_franchise_western": "Random",
+      "cosplay_franchise_asian": "Random",
+      "hosiery": "None",
+      "hosiery_color": "None",
+      "dress_type": "None",
+      "dress_color": "None",
+      "outerwear": "None",
+      "outerwear_color": "None",
+      "outerwear_wearing_style": "None",
+      "belt": "None",
+      "belt_color": "None",
+      "footwear": "None",
+      "footwear_color": "None",
+      "accessories_jewelry": "Random",
+      "accessories_necklace": "Random",
+      "accessories_earrings": "Random",
+      "accessories_bracelet": "Random",
+      "accessories_rings": "Random",
+      "head_accessory": "Random",
+      "accessories_glasses": "None",
+      "armwear": "Random",
+      "accessories_bag": "None",
+      "accessories_scarf": "None",
+      "face_hair_text_override": "",
+      "setting_text_override": "",
+      "pose_text_override": "",
+      "custom_color_overrides": "",
+      "wildcard_subject": "",
+      "wildcard_clothing": "",
+      "wildcard_pose": "",
+      "wildcard_setting": "",
+      "wildcard_photography": "",
+      "override_field": "None",
+      "inspect_property": "None",
+      "cleavage_depth": "Random",
+      "cleavage_type": "Random",
+      "control_after_generate#1": "randomize"
+    },
+    "class_type": "CharacterPromptFactory",
+    "_meta": {
+      "title": "Character Architect"
+    }
+  },
+  "436": {
+    "inputs": {
+      "text_0": "",
+      "text": [
+        "441",
+        0
+      ]
+    },
+    "class_type": "ShowText|pysssss",
+    "_meta": {
+      "title": "Show Text 🐍"
+    }
+  },
+  "439": {
+    "inputs": {
+      "positive": ""
+    },
+    "class_type": "easy positive",
+    "_meta": {
+      "title": "Positive"
+    }
+  },
+  "441": {
+    "inputs": {
+      "string_a": [
+        "434",
+        0
+      ],
+      "string_b": [
+        "439",
+        0
+      ],
+      "delimiter": ""
+    },
+    "class_type": "StringConcatenate",
+    "_meta": {
+      "title": "Concatenate Text"
+    }
+  },
+  "442": {
+    "inputs": {
+      "text": [
+        "441",
+        0
+      ],
+      "clip": [
+        "56",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "443": {
+    "inputs": {
+      "seed": 57366185665815
+    },
+    "class_type": "easy seed",
+    "_meta": {
+      "title": "EasySeed"
+    }
+  },
+  "444": {
+    "inputs": {
+      "preset": "subtle",
+      "per_layer_weights": "1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.5, 5.0, 1.1, 4.0, 1.0",
+      "multiplier": 1,
+      "renormalize": true,
+      "conditioning": [
+        "442",
+        0
+      ]
+    },
+    "class_type": "ConditioningKrea2Rebalance",
+    "_meta": {
+      "title": "🎛️ Krea 2 Conditioning Control"
+    }
+  },
+  "461": {
+    "inputs": {
+      "text_0": "",
+      "text": [
+        "434",
+        0
+      ]
+    },
+    "class_type": "ShowText|pysssss",
+    "_meta": {
+      "title": "Show Text 🐍"
+    }
+  },
+  "465": {
+    "inputs": {
+      "multiplier": 0.93,
+      "samples": [
+        "365",
+        0
+      ]
+    },
+    "class_type": "LatentMultiply",
+    "_meta": {
+      "title": "LatentMultiply"
+    }
+  }
+}

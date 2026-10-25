@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#121212;color:#e6e6e6;font-family:'IBM Plex Sans Condensed',sans-serif;}
+a{color:oklch(0.83 0.14 78);} a:hover{color:#fff;}
+button{font-family:inherit;}
+textarea::placeholder{color:#5a5a5a;}
+*::-webkit-scrollbar{width:8px;height:8px} *::-webkit-scrollbar-thumb{background:#2c2c2c;border-radius:4px}
+</style>
+</helmet>
+<div style="height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:12px">
+  <div style="height:44px;flex:none;display:flex;align-items:center;gap:14px;padding:0 12px;border-bottom:1px solid #262626;background:#171717">
+    <div style="display:flex;align-items:baseline;gap:8px;min-width:0">
+      <span style="font-weight:600;font-size:14px;letter-spacing:0.01em;white-space:nowrap">Character Architect</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6c6c6c;white-space:nowrap">krea2 · rework</span>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6c6c6c">SEED</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#cfcfcf;min-width:118px">{{ seed }}</span>
+      <button onClick="{{ newSeed }}" style="padding:3px 8px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:12px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">New</button>
+      <div style="display:flex;gap:2px;padding:2px;background:#1c1c1c;border:1px solid #2a2a2a;border-radius:5px">
+        <sc-for list="{{ seedModes }}" as="m" hint-placeholder-count="3">
+          <sc-if value="{{ m.on }}"><button onClick="{{ m.pick }}" style="padding:2px 8px;border:none;background:#333;color:#fff;border-radius:3px;font-size:11px;cursor:pointer">{{ m.label }}</button></sc-if>
+          <sc-if value="{{ m.off }}"><button onClick="{{ m.pick }}" style="padding:2px 8px;border:none;background:transparent;color:#8a8a8a;border-radius:3px;font-size:11px;cursor:pointer" style-hover="color:#ddd">{{ m.label }}</button></sc-if>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ run }}" style="height:30px;padding:0 18px;border:none;border-radius:5px;background:oklch(0.83 0.14 78);color:#17130a;font-weight:600;font-size:13px;cursor:pointer" style-hover="background:oklch(0.88 0.13 82)">Queue</button>
+    </sc-if>
+    <sc-if value="{{ running }}">
+      <button onClick="{{ cancel }}" style="height:30px;padding:0 14px;border:1px solid #3a3a3a;border-radius:5px;background:#1c1c1c;color:#ddd;font-size:13px;cursor:pointer;font-family:'IBM Plex Mono',monospace">{{ progLabel }} · Stop</button>
+    </sc-if>
+  </div>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:136px minmax(0,1fr) auto">
+    <div style="border-right:1px solid #232323;background:#151515;padding:8px 6px;display:flex;flex-direction:column;gap:2px;overflow:auto">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="10">
+        <sc-if value="{{ n.divider }}"><div style="height:1px;background:#242424;margin:6px 4px"></div></sc-if>
+        <sc-if value="{{ n.isActive }}">
+          <button onClick="{{ n.go }}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:none;border-radius:4px;background:#262626;color:#fff;font-size:13px;font-weight:500;text-align:left;cursor:pointer">
+            <span>{{ n.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:oklch(0.83 0.14 78)">{{ n.count }}</span>
+          </button>
+        </sc-if>
+        <sc-if value="{{ n.notActive }}">
+          <button onClick="{{ n.go }}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:none;border-radius:4px;background:transparent;color:#9a9a9a;font-size:13px;text-align:left;cursor:pointer" style-hover="background:#1d1d1d;color:#e0e0e0">
+            <span>{{ n.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c5c5c">{{ n.count }}</span>
+          </button>
+        </sc-if>
+      </sc-for>
+    </div>
+
+    <div style="min-width:0;overflow:auto;padding:0 16px 40px">
+      <div style="position:sticky;top:0;z-index:2;background:#121212;display:flex;align-items:center;gap:10px;padding:12px 0 10px;border-bottom:1px solid #262626">
+        <span style="font-size:16px;font-weight:600">{{ secLabel }}</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6c6c6c">{{ secSummary }}</span>
+        <div style="flex:1"></div>
+        <sc-if value="{{ hasBulk }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;gap:4px">
+            <button onClick="{{ allRandom }}" style="padding:3px 8px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:12px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">All random</button>
+            <button onClick="{{ allNone }}" style="padding:3px 8px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:12px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">All none</button>
+          </div>
+        </sc-if>
+        <button onClick="{{ resetSec }}" style="padding:3px 8px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:12px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">Reset</button>
+      </div>
+
+      <sc-if value="{{ isPipeline }}">
+        <div style="padding:10px 0 8px;border-bottom:1px solid #222">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;color:#8d8d8d">LoRA stack</span>
+            <button onClick="{{ addLora }}" style="padding:2px 8px;border:1px dashed #3a3a3a;background:transparent;color:#9a9a9a;border-radius:4px;font-size:11px;cursor:pointer" style-hover="color:#fff;border-color:#666">+ Add</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <sc-for list="{{ loras }}" as="l" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;align-items:center;padding:4px 6px;background:#181818;border:1px solid #232323;border-radius:5px">
+                <sc-if value="{{ l.on }}"><button onClick="{{ l.toggle }}" style="padding:3px 0;border:none;border-radius:4px;background:oklch(0.83 0.14 78);color:#17130a;font-size:11px;font-weight:600;cursor:pointer">ON</button></sc-if>
+                <sc-if value="{{ l.off }}"><button onClick="{{ l.toggle }}" style="padding:3px 0;border:1px solid #333;border-radius:4px;background:transparent;color:#6c6c6c;font-size:11px;cursor:pointer">OFF</button></sc-if>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;min-width:0">
+                  <sc-for list="{{ l.names }}" as="c">
+                    <sc-if value="{{ c.on }}"><button onClick="{{ c.pick }}" style="padding:3px 8px;border:1px solid #4a4a4a;background:#2a2a2a;color:#fff;border-radius:4px;font-size:12px;cursor:pointer">{{ c.label }}</button></sc-if>
+                    <sc-if value="{{ c.off }}"><button onClick="{{ c.pick }}" style="padding:3px 8px;border:1px solid transparent;background:transparent;color:#777;border-radius:4px;font-size:12px;cursor:pointer" style-hover="color:#ddd">{{ c.label }}</button></sc-if>
+                  </sc-for>
+                  <select value="{{ l.nameSel }}" onChange="{{ l.onNameSel }}" style="height:24px;max-width:150px;box-sizing:border-box;border:1px solid #2b2b2b;border-radius:4px;background:#141414;color:#bbb;padding:0 4px;font-family:'IBM Plex Mono',monospace;font-size:11px;outline:none;cursor:pointer">
+                    <option value="">▾ list</option>
+                    <sc-for list="{{ l.nameOpts }}" as="o"><option value="{{ o.v }}">{{ o.v }}</option></sc-for>
+                  </select>
+                  <input value="{{ l.nameVal }}" onChange="{{ l.onName }}" placeholder="file.safetensors" style="width:130px;height:24px;box-sizing:border-box;border:1px solid {{ l.nameBorder }};border-radius:4px;outline:none;background:#141414;color:#ddd;padding:0 6px;font-family:'IBM Plex Mono',monospace;font-size:11px">
+                </div>
+                <div style="display:flex;gap:2px">
+                  <sc-for list="{{ l.strengths }}" as="c">
+                    <sc-if value="{{ c.on }}"><button onClick="{{ c.pick }}" style="padding:3px 6px;border:1px solid oklch(0.83 0.14 78);background:oklch(0.83 0.14 78);color:#17130a;border-radius:4px;font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer">{{ c.label }}</button></sc-if>
+                    <sc-if value="{{ c.off }}"><button onClick="{{ c.pick }}" style="padding:3px 6px;border:1px solid #2e2e2e;background:#1c1c1c;color:#999;border-radius:4px;font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer" style-hover="color:#fff;border-color:#4a4a4a">{{ c.label }}</button></sc-if>
+                  </sc-for>
+                  <div style="display:flex;align-items:center;height:24px;box-sizing:border-box;border:1px solid {{ l.sBorder }};border-radius:4px;background:#141414;overflow:hidden;margin-left:2px">
+                    <button onClick="{{ l.sDec }}" style="width:18px;height:100%;border:none;background:transparent;color:#999;cursor:pointer;padding:0" style-hover="color:#fff;background:#222">−</button>
+                    <input value="{{ l.sVal }}" onChange="{{ l.onS }}" style="width:40px;height:100%;border:none;outline:none;background:transparent;color:#ddd;font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center;padding:0">
+                    <button onClick="{{ l.sInc }}" style="width:18px;height:100%;border:none;background:transparent;color:#999;cursor:pointer;padding:0" style-hover="color:#fff;background:#222">+</button>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isRef }}">
+        <div style="display:flex;gap:12px;align-items:stretch;padding:12px 0;border-bottom:1px solid #222;flex-wrap:wrap">
+          <input type="file" accept="image/*" ref="{{ fileRef }}" onChange="{{ onFile }}" style="display:none">
+          <div onClick="{{ pickFile }}" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="width:180px;height:180px;flex:none;box-sizing:border-box;border:1px dashed {{ dropBorder }};border-radius:6px;background:repeating-linear-gradient(135deg,#171717 0 8px,#1a1a1a 8px 16px);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden">
+            <sc-if value="{{ hasRef }}" hint-placeholder-val="{{ false }}"><img src="{{ refImg }}" style="width:100%;height:100%;object-fit:contain;background:#111"></sc-if>
+            <sc-if value="{{ noRef }}" hint-placeholder-val="{{ true }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6a6a6a;text-align:center;line-height:1.7">drop image<br>or click to browse</span></sc-if>
+          </div>
+          <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px">
+            <sc-if value="{{ hasRef }}">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8a8a;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ refMeta }}</span>
+                <button onClick="{{ pickFile }}" style="padding:2px 8px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:11px;cursor:pointer" style-hover="color:#fff">Replace</button>
+                <button onClick="{{ clearRef }}" style="padding:2px 8px;border:1px solid transparent;background:transparent;color:#777;border-radius:4px;font-size:11px;cursor:pointer" style-hover="color:#e66">Remove</button>
+              </div>
+            </sc-if>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:12px;color:#8d8d8d;flex:1">Keep from reference</span>
+              <button onClick="{{ keepAll }}" style="padding:1px 6px;border:none;background:transparent;color:#777;font-size:11px;cursor:pointer" style-hover="color:#fff">all</button>
+              <button onClick="{{ keepNone }}" style="padding:1px 6px;border:none;background:transparent;color:#777;font-size:11px;cursor:pointer" style-hover="color:#fff">none</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px">
+              <sc-for list="{{ keepChips }}" as="c">
+                <sc-if value="{{ c.on }}"><button onClick="{{ c.pick }}" style="padding:3px 8px;border:1px solid oklch(0.83 0.14 78);background:oklch(0.83 0.14 78);color:#17130a;border-radius:4px;font-size:12px;line-height:16px;font-weight:500;cursor:pointer">{{ c.label }}</button></sc-if>
+                <sc-if value="{{ c.off }}"><button onClick="{{ c.pick }}" style="padding:3px 8px;border:1px solid #2b2b2b;background:#1a1a1a;color:#b0b0b0;border-radius:4px;font-size:12px;line-height:16px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">{{ c.label }}</button></sc-if>
+              </sc-for>
+            </div>
+            <span style="font-size:11px;line-height:1.5;color:#6c6c6c;text-wrap:pretty">Anything not kept is driven by your menu picks. Change amount sets how far the output can move from the reference.</span>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isPipeline }}">
+        <div style="display:flex;align-items:center;gap:6px;padding:10px 0 2px">
+          <span style="font-size:12px;color:#8d8d8d;width:124px;margin-right:4px">Run mode</span>
+          <button onClick="{{ baseOnly }}" style="padding:3px 10px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:12px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">Base only</button>
+          <button onClick="{{ allPhases }}" style="padding:3px 10px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:12px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">All phases</button>
+        </div>
+      </sc-if>
+      <sc-for list="{{ fields }}" as="f" hint-placeholder-count="8">
+        <sc-if value="{{ f.head }}"><div style="padding:16px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#d8d8d8;border-bottom:1px solid #2a2a2a">{{ f.head }}</div></sc-if>
+        <div style="display:grid;grid-template-columns:124px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0;border-bottom:1px solid #1f1f1f">
+          <div style="display:flex;align-items:center;gap:6px;padding-top:4px;color:#8d8d8d;font-size:12px;min-width:0">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.label }}</span>
+            <sc-if value="{{ f.changed }}"><span style="flex:none;width:5px;height:5px;border-radius:50%;background:oklch(0.83 0.14 78)"></span></sc-if>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+            <sc-for list="{{ f.chips }}" as="c">
+              <sc-if value="{{ c.onValue }}">
+                <button onClick="{{ c.pick }}" style="display:flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid oklch(0.83 0.14 78);background:oklch(0.83 0.14 78);color:#17130a;border-radius:4px;font-size:12px;line-height:16px;font-weight:500;cursor:pointer">
+                  <sc-if value="{{ c.sw }}"><span style="width:9px;height:9px;border-radius:50%;border:1px solid rgba(0,0,0,0.35);background:{{ c.sw }}"></span></sc-if><sc-if value="{{ c.box }}"><span style="flex:none;width:14px;height:14px;display:flex;align-items:center;justify-content:center"><span style="box-sizing:border-box;width:{{ c.bw }};height:{{ c.bh }};border:1.5px solid currentColor;border-radius:2px"></span></span></sc-if>{{ c.label }}</button>
+              </sc-if>
+              <sc-if value="{{ c.onSpecial }}">
+                <button onClick="{{ c.pick }}" style="padding:3px 8px;border:1px dashed oklch(0.83 0.14 78);background:oklch(0.83 0.14 78 / 0.08);color:oklch(0.86 0.13 80);border-radius:4px;font-size:12px;line-height:16px;cursor:pointer">{{ c.label }}</button>
+              </sc-if>
+              <sc-if value="{{ c.off }}">
+                <button onClick="{{ c.pick }}" style="display:flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid #2b2b2b;background:#1a1a1a;color:#b0b0b0;border-radius:4px;font-size:12px;line-height:16px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">
+                  <sc-if value="{{ c.sw }}"><span style="width:9px;height:9px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:{{ c.sw }}"></span></sc-if><sc-if value="{{ c.box }}"><span style="flex:none;width:14px;height:14px;display:flex;align-items:center;justify-content:center"><span style="box-sizing:border-box;width:{{ c.bw }};height:{{ c.bh }};border:1.5px solid currentColor;border-radius:2px"></span></span></sc-if>{{ c.label }}</button>
+              </sc-if>
+            </sc-for>
+            <sc-if value="{{ f.hasSelect }}">
+              <select value="{{ f.selVal }}" onChange="{{ f.onSel }}" style="height:24px;max-width:150px;box-sizing:border-box;border:1px solid #2b2b2b;border-radius:4px;background:#141414;color:#bbb;padding:0 4px;font-family:'IBM Plex Mono',monospace;font-size:11px;outline:none;cursor:pointer" style-hover="border-color:#4a4a4a">
+                <option value="">▾ list</option>
+                <sc-for list="{{ f.selOpts }}" as="o"><option value="{{ o.v }}">{{ o.v }}</option></sc-for>
+              </select>
+            </sc-if>
+            <sc-if value="{{ f.manual }}">
+              <div style="display:flex;align-items:center;height:24px;box-sizing:border-box;border:1px solid {{ f.inBorder }};border-radius:4px;background:#141414;overflow:hidden">
+                <sc-if value="{{ f.numeric }}"><button onClick="{{ f.dec }}" style="width:20px;height:100%;border:none;border-right:1px solid #262626;background:transparent;color:#999;font-size:13px;cursor:pointer;padding:0" style-hover="color:#fff;background:#222">−</button></sc-if>
+                <input value="{{ f.inVal }}" onChange="{{ f.onIn }}" placeholder="{{ f.ph }}" style="width:{{ f.inW }};height:100%;box-sizing:border-box;border:none;outline:none;background:transparent;color:{{ f.inColor }};padding:0 6px;font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center">
+                <sc-if value="{{ f.numeric }}"><button onClick="{{ f.inc }}" style="width:20px;height:100%;border:none;border-left:1px solid #262626;background:transparent;color:#999;font-size:13px;cursor:pointer;padding:0" style-hover="color:#fff;background:#222">+</button></sc-if>
+              </div>
+            </sc-if>
+            <sc-if value="{{ f.icons }}">
+              <div style="display:flex;gap:2px;margin-left:auto">
+                <button onClick="{{ f.pickRandom }}" title="Random" style="width:24px;height:22px;border:1px dashed {{ f.rndBorder }};background:transparent;color:{{ f.rndColor }};border-radius:4px;font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer">R</button>
+                <button onClick="{{ f.pickNone }}" title="None" style="width:24px;height:22px;border:1px solid {{ f.noneBorder }};background:transparent;color:{{ f.noneColor }};border-radius:4px;font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer">∅</button>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-for>
+
+      <sc-for list="{{ texts }}" as="t">
+        <div style="display:flex;flex-direction:column;gap:5px;padding:10px 0;border-bottom:1px solid #1f1f1f">
+          <span style="color:#8d8d8d;font-size:12px">{{ t.label }}</span>
+          <textarea value="{{ t.value }}" onChange="{{ t.onChange }}" placeholder="{{ t.ph }}" rows="{{ t.rows }}" style="width:100%;box-sizing:border-box;resize:vertical;background:#181818;border:1px solid #2a2a2a;border-radius:5px;color:#ddd;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;outline:none" style-focus="border-color:#555"></textarea>
+        </div>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ showPreview }}" hint-placeholder-val="{{ true }}">
+      <div style="width:min(320px,32vw);border-left:1px solid #232323;background:#151515;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:auto;box-sizing:border-box">
+        <div style="position:relative;width:100%;aspect-ratio:{{ aspectCss }};border-radius:6px;border:1px solid #2a2a2a;background:repeating-linear-gradient(135deg,#1a1a1a 0 8px,#1d1d1d 8px 16px);display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5e5e5e;text-align:center;line-height:1.6">output<br>{{ dims }}</span>
+          <sc-if value="{{ refOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;top:8px;left:8px;display:flex;flex-direction:column;gap:3px;align-items:flex-start"><img src="{{ refImg }}" style="width:56px;height:56px;object-fit:cover;border-radius:4px;border:1px solid #444"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#999;background:#111;padding:1px 4px;border-radius:2px">REF</span></div></sc-if>
+          <sc-if value="{{ running }}"><div style="position:absolute;left:0;bottom:0;height:3px;width:{{ progPct }};background:oklch(0.83 0.14 78)"></div></sc-if>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px">
+          <sc-for list="{{ stages }}" as="s" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div style="height:3px;border-radius:2px;background:{{ s.bar }}"></div>
+              <span style="font-size:10px;color:{{ s.color }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
+          <span style="font-size:12px;color:#8d8d8d">Prompt</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6c6c6c">{{ promptMeta }}</span>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.55;color:#bdbdbd;background:#121212;border:1px solid #232323;border-radius:5px;padding:8px;text-wrap:pretty">{{ prompt }}</div>
+        <div style="display:flex;gap:4px">
+          <input value="{{ pName }}" onChange="{{ onPName }}" onKeyDown="{{ onPKey }}" placeholder="Profile name" style="flex:1;min-width:0;height:28px;box-sizing:border-box;border:1px solid #2b2b2b;border-radius:4px;outline:none;background:#141414;color:#ddd;padding:0 8px;font-size:12px;font-family:inherit" style-focus="border-color:#555">
+          <button onClick="{{ saveProfile }}" style="height:28px;padding:0 12px;border:none;border-radius:4px;background:oklch(0.83 0.14 78);color:#17130a;font-weight:600;font-size:12px;cursor:pointer" style-hover="background:oklch(0.88 0.13 82)">Save profile</button>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button onClick="{{ copyPrompt }}" style="flex:1;height:24px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:11px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">Copy prompt</button>
+          <button onClick="{{ exportTxt }}" style="flex:1;height:24px;border:1px solid #2e2e2e;background:#1c1c1c;color:#b4b4b4;border-radius:4px;font-size:11px;cursor:pointer" style-hover="border-color:#4a4a4a;color:#fff">Download .txt</button>
+        </div>
+        <sc-if value="{{ hasProfiles }}">
+          <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+            <span style="font-size:12px;color:#8d8d8d">Saved profiles</span>
+            <sc-for list="{{ profiles }}" as="p">
+              <div style="display:flex;flex-direction:column;gap:4px;padding:7px 8px;background:#181818;border:1px solid #232323;border-radius:5px">
+                <div style="display:flex;align-items:baseline;gap:6px">
+                  <span style="font-size:12px;font-weight:600;color:#e6e6e6;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#666">{{ p.date }}</span>
+                </div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.45;color:#7d7d7d">{{ p.snippet }}</span>
+                <div style="display:flex;gap:3px">
+                  <button onClick="{{ p.load }}" style="padding:2px 8px;border:1px solid #3a3a3a;background:#222;color:#ddd;border-radius:3px;font-size:11px;cursor:pointer" style-hover="border-color:#666;color:#fff">Load</button>
+                  <button onClick="{{ p.copy }}" style="padding:2px 8px;border:1px solid #2e2e2e;background:transparent;color:#999;border-radius:3px;font-size:11px;cursor:pointer" style-hover="color:#fff">Copy</button>
+                  <button onClick="{{ p.txt }}" style="padding:2px 8px;border:1px solid #2e2e2e;background:transparent;color:#999;border-radius:3px;font-size:11px;cursor:pointer" style-hover="color:#fff">.txt</button>
+                  <div style="flex:1"></div>
+                  <button onClick="{{ p.del }}" style="padding:2px 7px;border:1px solid transparent;background:transparent;color:#666;border-radius:3px;font-size:11px;cursor:pointer" style-hover="color:#e66">Delete</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showPreview&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;specialChips&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;inline&quot;,&quot;icons&quot;],&quot;default&quot;:&quot;inline&quot;,&quot;tsType&quot;:&quot;'inline'|'icons'&quot;}}">
+const C = ['black','white','cream','navy','burgundy','olive','camel','blush','charcoal','red'];
+const SW = {black:'#111',white:'#f4f4f4',cream:'#efe6cf',navy:'#1f2a4d',burgundy:'#6b1f2e',olive:'#6b6b34',camel:'#c09a63',blush:'#e8b4b8',charcoal:'#3b3d40',red:'#c3242b'};
+const F = (k,l,d,o,t) => ({k,l,d,o,t});
+const R='Random', N='None';
+const SECTIONS = [
+  {id:'pipeline',label:'Pipeline',fields:[
+    F('aspect_ratio','Aspect','3:4',['9:16','2:3','3:4','4:5','1:1','5:4','4:3','3:2','16:9'],'aspect'),
+    F('megapixels','Megapixels','0.7',['0.5','0.7','1.0','1.4','2.0'],'num'),
+    F('steps','Base steps','11',['6','8','11','16','24'],'num'),
+    F('steps_to_run','Steps to run','3',['2','3','4','6','all'],'num'),
+    F('sampler_name','Base sampler','exponential/ddim',['exponential/ddim','linear/ralston_2s','linear/heun_3s','multistep/res_2m'],'num'),
+    F('scheduler','Scheduler','ddim_uniform',['simple','ddim_uniform','beta','karras'],'num'),
+    F('eta','Eta','0.66',['0.33','0.5','0.66','0.8'],'num'),
+    F('enhancer','Krea2T enhancer','On',['On','Off'],'num'),
+    F('text_scale','Text scale','2',['1','1.5','2','3'],'num'),
+    F('cond_base','Cond · base','uniform',['uniform','subtle','strong','custom'],'num'),
+    F('cond_base_mult','Cond · base ×','2',['1','1.5','2','3'],'num'),
+    Object.assign(F('chain_on','Chain pass','On',['On','Off'],'num'),{head:'Phase 2 · Chain resample'}),
+    Object.assign(F('chain_sampler','Chain sampler','linear/heun_3s',['linear/heun_3s','linear/ralston_2s','exponential/ddim'],'num'),{dep:'chain_on'}),
+    Object.assign(F('chain_steps','Chain steps','8',['4','6','8','12'],'num'),{dep:'chain_on'}),
+    Object.assign(F('upscale_on','Upscale','On',['On','Off'],'num'),{head:'Upscale'}),
+    Object.assign(F('upscale_model','Upscaler','4x-PBRify',['4x-PBRify','4x-UltraSharp','lanczos only'],'num'),{dep:'upscale_on'}),
+    Object.assign(F('rescale','Upscale ×','2',['1.5','2','3'],'num'),{dep:'upscale_on'}),
+    Object.assign(F('detail_on','Detail pass','On',['On','Off'],'num'),{head:'Phase 3 · Detail pass'}),
+    Object.assign(F('cond_detail','Cond · detail','subtle',['uniform','subtle','strong','custom'],'num'),{dep:'detail_on'}),
+    Object.assign(F('latent_mult','Latent multiply','0.93',['0.90','0.93','0.96','1.00'],'num'),{dep:'detail_on'}),
+    Object.assign(F('detail_denoise','Detail denoise','0.25',['0.15','0.25','0.35','0.5'],'num'),{dep:'detail_on'}),
+    Object.assign(F('detail_sampler','Detail sampler','linear/ralston_2s',['linear/ralston_2s','linear/heun_3s','exponential/ddim'],'num'),{dep:'detail_on'}),
+  ]},
+  {id:'ref',label:'Reference',fields:[
+    F('ref_on','Use reference','Off',['On','Off'],'num'),
+    Object.assign(F('ref_mode','Mode','img2img',['img2img','identity','style','structure'],'num'),{dep:'ref_on'}),
+    Object.assign(F('ref_denoise','Change amount','0.55',['0.3','0.45','0.55','0.7','0.85'],'num'),{dep:'ref_on'}),
+    Object.assign(F('ref_weight','Ref weight','0.8',['0.5','0.65','0.8','1.0'],'num'),{dep:'ref_on'}),
+    Object.assign(F('ref_match_aspect','Match ref aspect','On',['On','Off'],'num'),{dep:'ref_on'}),
+  ]},
+  {id:'post',label:'Post',fields:[
+    F('b1','Mid brightness','+0.03',['-0.02','0','+0.03','+0.05'],'num'),
+    F('c1','Mid contrast','0.97',['0.95','0.97','1.00','1.03'],'num'),
+    F('s1','Mid saturation','0.97',['0.95','0.97','1.00','1.05'],'num'),
+    F('g1','Gaussian blur','0.1',['0','0.1','0.2'],'num'),
+    F('rcas','RCAS sharpen','0.13',['0.08','0.13','0.2','0.3'],'num'),
+    F('lab','LAB correction','auto',['auto','off'],'num'),
+    F('b2','Final brightness','-0.01',['-0.02','-0.01','0','+0.02'],'num'),
+    F('c2','Final contrast','1.01',['0.99','1.00','1.01','1.03'],'num'),
+    F('lap','Laplacian sharpen','0.13',['0','0.08','0.13','0.2'],'num'),
+  ]},
+  {id:'subject',label:'Subject',div:true,fields:[
+    F('media_type','Media',N,['photo','film still','editorial','digital art','illustration','3D render']),
+    F('gender','Gender',N,['female','male','androgynous']),
+    F('content_rating','Rating','glamour',['sfw','artistic','glamour','mature']),
+    F('species_mode','Species','human',['human','elf','android','fae','demon'],'num'),
+    F('origin_age','Age','mid thirties',['early twenties','late twenties','mid thirties','forties','fifties','sixties+']),
+    F('origin_ethnicity','Origin','afro-caribbean',['east asian','south asian','west african','afro-caribbean','nordic','mediterranean','latin american','middle eastern','slavic']),
+    F('ethnicity_guidance','Ethnicity guidance','On',['On','Off'],'num'),
+    F('enhance_realism','Enhance realism','On',['On','Off'],'num'),
+    F('free_prompt_position','Free prompt at','after intro',['before intro','after intro','at end'],'num'),
+  ]},
+  {id:'body',label:'Body',fields:[
+    F('body_archetype','Archetype',N,['runway','athlete','dancer','everyday','statuesque']),
+    F('body_type','Height','average height',['petite','average height','tall']),
+    F('body_physique','Physique','plus-size',['slim','athletic','average','curvy','plus-size','muscular']),
+    F('body_feminine_curves','Silhouette','pronounced hourglass',['subtle','balanced','hourglass','pronounced hourglass']),
+    F('thigh_shape','Thighs',R,['slender','toned','powerful']),
+    F('body_detail_1','Detail',N,['freckles','beauty mark','scar','birthmark','vitiligo']),
+    F('body_hair','Body hair',N,['light','natural','none visible']),
+    F('skin_finish','Skin finish',N,['matte','natural','dewy','sun-kissed','freckled']),
+  ]},
+  {id:'face',label:'Face',fields:[
+    F('expression','Expression','surprised',['neutral','soft smile','laughing','surprised','pensive','serious','smirk']),
+    F('mouth_expression','Mouth',N,['closed','parted lips','open smile']),
+    F('eye_expression','Gaze','intense',['soft','intense','playful','distant','sleepy']),
+    F('face_shape','Face shape',R,['oval','round','square','heart','angular','long']),
+    F('jawline','Jawline',R,['soft','defined','strong','tapered']),
+    F('chin_shape','Chin',R,['rounded','pointed','cleft','square']),
+    F('eye_shape','Eye shape',R,['almond','round','hooded','monolid','upturned']),
+    F('eye_color','Eye color',R,['brown','dark brown','hazel','green','blue','grey','amber']),
+    F('eyelashes','Lashes',R,['natural','long','dramatic','sparse']),
+    F('eyebrows','Brows',R,['thin','natural','bold','arched','straight']),
+    F('nose_shape','Nose',R,['button','straight','aquiline','broad','upturned']),
+    F('lip_shape','Lips',R,['thin','medium','full','very full','cupid bow']),
+    F('facial_hair','Facial hair',N,['stubble','mustache','short beard','full beard']),
+  ]},
+  {id:'hair',label:'Hair',fields:[
+    F('hair_color','Color',R,['black','espresso brown','chestnut','auburn','copper','honey blonde','platinum','silver','pastel pink']),
+    F('hair_texture','Texture',R,['straight','wavy','curly','coily']),
+    F('hair_style','Style',R,['loose','ponytail','bun','braids','dreadlocks','half-up','pigtails']),
+    F('hair_cut','Cut',R,['bob','pixie','layered','shag','fade','undercut','blunt']),
+    F('hair_length','Length',R,['cropped','short','chin','shoulder','long','very long']),
+    F('bangs_style','Bangs',R,['curtain','blunt','side-swept','wispy','micro']),
+  ]},
+  {id:'beauty',label:'Beauty',fields:[
+    F('makeup_eye','Eye makeup',R,['natural','smoky','winged liner','graphic liner','glitter']),
+    F('makeup_lips','Lips',R,['nude','glossy','matte red','berry','ombre']),
+    F('makeup_complexion','Complexion',N,['bare','dewy','matte','contoured','blushed']),
+    F('nail_style','Nails',R,['short natural','french','long manicured','chrome','stiletto']),
+    F('tattoo_style','Tattoo',R,['fine line','ornamental','traditional','blackwork','watercolor','sleeve']),
+  ]},
+  {id:'outfit',label:'Outfit',div:true,fields:[
+    F('clothing_archetype','Archetype',N,['casual','light academia','streetwear','business','athleisure','vintage','bohemian','goth']),
+    F('neckline','Neckline',N,['crew','v-neck','scoop','square','off-shoulder','halter','turtleneck']),
+    F('top_type','Top',R,['t-shirt','cropped tee','blouse','tank','sweater','shirt','corset top']),
+    F('sleeve_length','Sleeves',N,['sleeveless','short','three-quarter','long']),
+    F('top_color','Top color',R,C,'color'),
+    F('bottom_type','Bottom',R,['jeans','joggers','skirt','shorts','trousers','cargo pants']),
+    F('bottom_length','Length',R,['mini','knee-length','midi','ankle','full-length']),
+    F('bottom_color','Bottom color',R,C,'color'),
+    F('dress_type','Dress',N,['slip','wrap','sundress','bodycon','maxi','shirt dress']),
+    F('dress_color','Dress color',N,C,'color'),
+    F('outerwear','Outerwear',N,['denim jacket','blazer','trench','leather jacket','cardigan','puffer']),
+    F('outerwear_color','Outer color',N,C,'color'),
+    F('outerwear_wearing_style','Worn',N,['open','buttoned','off shoulders','tied at waist']),
+    F('hosiery','Hosiery',N,['sheer tights','opaque tights','fishnet','knee socks','thigh-highs']),
+    F('hosiery_color','Hosiery color',N,C,'color'),
+    F('footwear','Footwear',N,['sneakers','boots','heels','loafers','sandals','barefoot']),
+    F('footwear_color','Shoe color',N,C,'color'),
+    F('belt','Belt',N,['leather','chain','wide','obi']),
+    F('belt_color','Belt color',N,C,'color'),
+  ]},
+  {id:'sets',label:'Sets',fields:[
+    F('lingerie_type','Lingerie',R,['bralette','slip','bodysuit','corset']),
+    F('lingerie_color','Lingerie color',R,C,'color'),
+    F('sleepwear_type','Sleepwear',R,['pajama set','nightgown','oversized tee','robe']),
+    F('sleepwear_color','Sleep color',R,C,'color'),
+    F('cosplay_type','Cosplay',R,['hero','mage','knight','idol','pilot']),
+    F('cosplay_color','Cosplay color',R,C,'color'),
+    F('cosplay_franchise_western','Western genre',R,['comics','space opera','fantasy saga','superhero']),
+    F('cosplay_franchise_asian','Asian genre',R,['shonen anime','magical girl','mecha','JRPG']),
+  ]},
+  {id:'acc',label:'Accessories',fields:[
+    F('accessories_jewelry','Jewelry',R,['pearl','gold','silver','minimal','statement']),
+    F('accessories_necklace','Necklace',R,['choker','pendant','chain','layered']),
+    F('accessories_earrings','Earrings',R,['studs','hoops','drops','cuffs']),
+    F('accessories_bracelet','Bracelet',R,['bangle','cuff','studded','charm','beaded']),
+    F('accessories_rings','Rings',R,['single band','stacked','signet','statement']),
+    F('head_accessory','Head',R,['pearl hair clips','headband','beret','cap','scrunchie','tiara']),
+    F('accessories_glasses','Glasses',N,['round','cat-eye','aviator','sunglasses','rimless']),
+    F('armwear','Armwear',R,['lace sleeves','gloves','arm warmers','watch']),
+    F('accessories_bag','Bag',N,['tote','crossbody','clutch','backpack']),
+    F('accessories_scarf','Scarf',N,['silk','knit','bandana']),
+    F('neckwear','Neckwear',N,['bow tie','tie','ribbon']),
+  ]},
+  {id:'scene',label:'Scene',div:true,fields:[
+    F('composition_archetype','Composition',N,['editorial','candid','studio','environmental','lifestyle']),
+    F('portrait_style','Framing',N,['headshot','half-body','three-quarter','full-body']),
+    F('enforce_portrait_framing','Enforce framing','Off',['On','Off'],'num'),
+    F('capture_style','Capture',N,['spontaneous','posed','paparazzi','selfie','documentary']),
+    F('pose','Pose',N,['standing','sitting','leaning','walking','lying down','kneeling','over shoulder']),
+    F('pose_mood','Pose mood',N,['relaxed','confident','playful','shy','dynamic']),
+    F('setting','Setting',N,['bedroom','studio','street','café','beach','forest','rooftop','library']),
+    F('scene_scenario','Scenario',N,['morning routine','night out','rainy day','golden hour walk','reading']),
+  ]},
+  {id:'camera',label:'Camera',fields:[
+    F('camera_direction','Direction',N,['front','three-quarter','profile','from behind']),
+    F('head_direction','Head',N,['toward camera','turned away','tilted','looking up','looking down']),
+    F('eye_focus','Eye focus',N,['at viewer','off-camera','closed','downcast']),
+    F('camera_angle','Angle',N,['eye level','high','low','overhead','dutch']),
+    F('shot_composition','Shot',N,['centered','rule of thirds','close-up','wide','negative space']),
+    F('lens_style','Lens',N,['24mm','35mm','50mm','85mm','135mm','fisheye']),
+    F('lighting_style','Lighting',N,['natural','softbox','golden hour','neon','rim light','window light','flash']),
+    F('optical_effect','Optics',N,['bokeh','lens flare','film grain','motion blur','halation']),
+  ]},
+  {id:'text',label:'Text',div:true,fields:[],texts:[
+    ['free_prompt','Free prompt','Inserted at the “Free prompt at” position…',3],
+    ['positive','Positive (scene)','Appended after the character block…',5],
+    ['face_hair_text_override','Face / hair override','',2],
+    ['setting_text_override','Setting override','',2],
+    ['pose_text_override','Pose override','',2],
+    ['custom_color_overrides','Color overrides','',2],
+    ['wildcard_subject','Wildcard · subject','__subject__',1],
+    ['wildcard_clothing','Wildcard · clothing','__clothing__',1],
+    ['wildcard_pose','Wildcard · pose','__pose__',1],
+    ['wildcard_setting','Wildcard · setting','__setting__',1],
+    ['wildcard_photography','Wildcard · photography','__photo__',1],
+  ]},
+];
+const KEEP = ['face','hair','body','skin tone','outfit','pose','setting','lighting','camera angle','colors'];
+const STEP = {ref_denoise:0.01,ref_weight:0.05,megapixels:0.1,steps:1,steps_to_run:1,eta:0.01,chain_steps:1,text_scale:0.1,cond_base_mult:0.1,rescale:0.1,latent_mult:0.01,detail_denoise:0.01,b1:0.01,c1:0.01,s1:0.01,g1:0.05,rcas:0.01,b2:0.01,c2:0.01,lap:0.01};
+const SIGNED = {b1:1,b2:1};
+const stepVal = (cur, def, step, dir, signed) => {
+  let n = parseFloat(cur); if (isNaN(n)) n = parseFloat(def); if (isNaN(n)) n = 0;
+  const dec = (String(step).split('.')[1]||'').length;
+  let x = +(n + dir*step).toFixed(dec); if (!signed) x = Math.max(0, x);
+  return (signed && x>0 ? '+' : '') + x.toFixed(dec);
+};
+const parseAspect = s => { const m = String(s).split(/[:x×\/]/).map(Number); if (m.length===2 && m[0]>0 && m[1]>0) return m; const n=parseFloat(s); return n>0 ? [n,1] : [3,4]; };
+const LORA_NAMES = ['TextFusion','Realism V2','Skin Detail','Film Look'];
+const STAGES = ['Base','Chain','Upscale','Detail','Save'];
+const ALL = SECTIONS.flatMap(s => s.fields);
+
+class Component extends DCLogic {
+  state = (() => {
+    const vals = {}; ALL.forEach(f => vals[f.k] = f.d);
+    return { vals, drafts:{}, keep:['face','skin tone'], refImg:'', drag:false, sec:'subject', seed:57366185665815, seedMode:'Random', texts:{},
+      loras:[{on:true,name:'TextFusion',s:'0.75'},{on:true,name:'Realism V2',s:'0.5'},{on:true,name:'Realism V2',s:'0.5'}],
+      running:false, prog:0, done:false };
+  })();
+  componentDidMount(){
+    try { this.setState({profiles: JSON.parse(localStorage.getItem('ca_profiles')||'[]')}); } catch(e){}
+    try { const r = JSON.parse(localStorage.getItem('ca_ref')||'null'); if (r) this.setState(r); } catch(e){}
+  }
+  fileRef = React.createRef();
+  loadFile(file){
+    if (!file || !file.type.startsWith('image/')) return;
+    const fr = new FileReader();
+    fr.onload = () => { const img = new Image(); img.onload = () => {
+      const r = {refImg: fr.result, refName: file.name, refW: img.naturalWidth, refH: img.naturalHeight};
+      this.setState(s => ({...r, vals:{...s.vals, ref_on:'On'}}));
+      try { localStorage.setItem('ca_ref', JSON.stringify(r)); } catch(e){}
+    }; img.src = fr.result; };
+    fr.readAsDataURL(file);
+  }
+  saveProfiles(p){ this.setState({profiles:p}); try { localStorage.setItem('ca_profiles', JSON.stringify(p)); } catch(e){} }
+  saveProfile(prompt){
+    const st = this.state, name = (st.pName||'').trim() || `Profile ${(st.profiles||[]).length+1}`;
+    const p = {id:Date.now(), name, date:new Date().toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}), prompt, vals:st.vals, texts:st.texts, loras:st.loras, seed:st.seed, keep:st.keep, refName:st.refName||''};
+    this.saveProfiles([p, ...(st.profiles||[]).filter(x => x.name!==name)]);
+    this.setState({pName:''});
+  }
+  download(name, prompt){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([prompt], {type:'text/plain'}));
+    a.download = name.replace(/[^\w-]+/g,'_') + '.txt'; a.click();
+  }
+  set(k,v,draft){ this.setState(s => ({vals:{...s.vals,[k]:v}, drafts:{...s.drafts,[k]:draft}})); }
+  setLora(i,patch){ this.setState(s => ({loras:s.loras.map((l,j)=> j===i?{...l,...patch}:l)})); }
+  bulk(fn){ const sec = SECTIONS.find(x=>x.id===this.state.sec); this.setState(s => { const vals={...s.vals}; sec.fields.forEach(f=>{ const v=fn(f); if(v!==undefined) vals[f.k]=v; }); return {vals}; }); }
+  rand(){ return Math.floor(Math.random()*1e15); }
+  run(){
+    if (this.state.running) return;
+    this.setState({running:true,prog:0,done:false});
+    this.t = setInterval(() => this.setState(s => {
+      const p = s.prog + 1.5;
+      if (p >= 100) { clearInterval(this.t);
+        const seed = s.seedMode==='Random' ? this.rand() : s.seedMode==='+1' ? s.seed+1 : s.seed;
+        return {prog:100,running:false,done:true,seed}; }
+      return {prog:p};
+    }), 50);
+  }
+  renderVals(){
+    const st = this.state, v = st.vals, icons = (this.props.specialChips ?? 'inline') === 'icons';
+    const A = 'oklch(0.83 0.14 78)';
+    const sec = SECTIONS.find(s => s.id === st.sec);
+    const isSpecial = x => x===R || x===N;
+    const fields = sec.fields.filter(f => !f.dep || v[f.dep]!=='Off').map(f => {
+      const cur = v[f.k], plain = f.t==='num' || f.t==='aspect';
+      const opts = plain || icons ? f.o : [R,N,...f.o];
+      const isBool = f.o.length===2 && f.o[0]==='On';
+      const custom = !opts.includes(cur) && !isSpecial(cur);
+      const step = STEP[f.k], draft = st.drafts[f.k];
+      const ab = f.t==='aspect' ? (o => { const [a,b]=parseAspect(o), m=14/Math.max(a,b); return {w:Math.round(a*m)+'px', h:Math.round(b*m)+'px'}; }) : null;
+      return {
+        label:f.l, changed: cur!==f.d, icons: icons && !plain, head: f.head || '',
+        manual: !isBool, numeric: !!step, custom,
+        hasSelect: !step && !isBool,
+        selOpts: (plain ? f.o : [R,N,...f.o]).map(o => ({v:o})),
+        selVal: (plain ? f.o : [R,N,...f.o]).includes(cur) ? cur : '',
+        selBorder: '#2b2b2b',
+        onSel: e => { if (e.target.value) this.set(f.k, e.target.value, undefined); },
+        inVal: draft ?? (custom ? cur : ''), ph: step ? '#' : f.t==='aspect' ? 'w:h' : 'custom…',
+        inW: step || f.t==='aspect' ? '48px' : '110px',
+        inBorder: custom ? A : '#2b2b2b', inColor: custom ? '#fff' : '#bbb',
+        onIn: e => { const val = e.target.value; this.set(f.k, val.trim() ? val.trim() : f.d, val); },
+        dec: () => this.set(f.k, stepVal(cur, f.d, step, -1, SIGNED[f.k]), undefined),
+        inc: () => this.set(f.k, stepVal(cur, f.d, step, 1, SIGNED[f.k]), undefined),
+        pickRandom:()=>this.set(f.k,R), pickNone:()=>this.set(f.k,N),
+        rndBorder: cur===R?A:'#3a3a3a', rndColor: cur===R?A:'#777',
+        noneBorder: cur===N?'#888':'#3a3a3a', noneColor: cur===N?'#eee':'#777',
+        chips: opts.map(o => ({label:o, sw: f.t==='color' ? SW[o] : '', box: !!ab, bw: ab ? ab(o).w : '', bh: ab ? ab(o).h : '', onValue: cur===o && !isSpecial(o), onSpecial: cur===o && isSpecial(o), off: cur!==o, pick:()=>this.set(f.k,o,undefined)}))
+      };
+    });
+    const nav = SECTIONS.map(s => {
+      const n = s.texts ? s.texts.filter(t => (st.texts[t[0]]||'').trim()).length : s.fields.filter(f => v[f.k]!==f.d).length;
+      return {label:s.label, count: n? String(n):'', divider:!!s.div, isActive:s.id===st.sec, notActive:s.id!==st.sec, go:()=>this.setState({sec:s.id})};
+    });
+    const texts = (sec.texts||[]).map(([k,l,ph,rows]) => ({label:l, ph, rows, value: st.texts[k]||'', onChange:e => { const val=e.target.value; this.setState(s=>({texts:{...s.texts,[k]:val}})); }}));
+    const set = sec.fields.filter(f=>!isSpecial(v[f.k])).length, rnd = sec.fields.filter(f=>v[f.k]===R).length;
+    const secSummary = sec.texts ? `${texts.filter(t=>t.value.trim()).length} filled` : sec.fields[0]?.t==='num' ? `${nav.find(n=>n.isActive).count||0} changed` : `${set} set · ${rnd} random`;
+
+    const refActive = v.ref_on==='On' && !!st.refImg;
+    const [aw,ah] = refActive && v.ref_match_aspect==='On' ? [st.refW, st.refH] : parseAspect(v.aspect_ratio), r = aw/ah, px = (parseFloat(v.megapixels)||0.7)*1e6;
+    const w = Math.round(Math.sqrt(px*r)/16)*16, h = Math.round(Math.sqrt(px/r)/16)*16;
+
+    const charIds = ['subject','body','face','hair','beauty','outfit','sets','acc','scene','camera'];
+    const cf = SECTIONS.filter(s=>charIds.includes(s.id)).flatMap(s=>s.fields).filter(f=>f.t!=='num');
+    const parts = cf.filter(f => !isSpecial(v[f.k]) && f.k!=='origin_age').map(f => f.t==='color' ? `${v[f.k]} ${f.l.replace(/ color/i,'').toLowerCase()}` : v[f.k]);
+    const age = isSpecial(v.origin_age) ? '' : v.origin_age+' ';
+    const free = (st.texts.free_prompt||'').trim(), pos = (st.texts.positive||'').trim();
+    let prompt = `An image, portrait of a ${age}person, ` + parts.join(', ');
+    if (free) prompt = v.free_prompt_position==='before intro' ? free+' '+prompt : v.free_prompt_position==='at end' ? prompt+', '+free : prompt.replace('person, ', 'person, '+free+', ');
+    if (pos) prompt += '. ' + pos;
+    if (refActive) prompt = `Based on the reference image${st.keep.length ? `, keeping the same ${st.keep.join(', ')}` : ''}. ` + prompt;
+    const nr = cf.filter(f=>v[f.k]===R).length;
+
+    const enabled = [true, v.chain_on!=='Off', v.upscale_on!=='Off', v.detail_on!=='Off', true];
+    const live = STAGES.map((_,i)=>i).filter(i=>enabled[i]);
+    const li = st.running ? Math.floor(st.prog/(100/live.length)) : st.done ? live.length : -1;
+    const stages = STAGES.map((l,i) => { const p = live.indexOf(i);
+      if (p<0) return {label:l+' · off', bar:'transparent', color:'#444'};
+      return {label:l, bar: p<li ? A : p===li ? 'oklch(0.83 0.14 78 / 0.45)' : '#2a2a2a', color: p<=li ? '#ddd' : '#666'}; });
+
+    return {
+      seed: String(st.seed),
+      newSeed: () => this.setState({seed:this.rand()}),
+      seedModes: ['Fixed','Random','+1'].map(m => ({label:m, on:st.seedMode===m, off:st.seedMode!==m, pick:()=>this.setState({seedMode:m})})),
+      idle: !st.running, running: st.running, run: () => this.run(),
+      cancel: () => { clearInterval(this.t); this.setState({running:false,prog:0}); },
+      progLabel: Math.round(st.prog)+'%', progPct: st.prog+'%',
+      nav, fields, texts, secLabel: sec.label, secSummary,
+      hasBulk: sec.fields.length>0 && sec.fields[0].t!=='num',
+      allRandom: () => this.bulk(f => f.t==='num'?undefined:R),
+      allNone: () => this.bulk(f => f.t==='num'?undefined:N),
+      resetSec: () => sec.texts ? this.setState({texts:{}}) : this.bulk(f => f.d),
+      isPipeline: sec.id==='pipeline',
+      addLora: () => this.setState(s => ({loras:[...s.loras,{on:true,name:'Skin Detail',s:'0.5'}]})),
+      loras: st.loras.map((l,i) => ({on:l.on, off:!l.on, toggle:()=>this.setLora(i,{on:!l.on}),
+        names: LORA_NAMES.map(n => ({label:n, on:l.name===n, off:l.name!==n, pick:()=>this.setLora(i,{name:n})})),
+        strengths: ['0.25','0.5','0.75','1.0'].map(x => ({label:x, on:l.s===x, off:l.s!==x, pick:()=>this.setLora(i,{s:x})})),
+        sVal: l.s, sCustom: !['0.25','0.5','0.75','1.0'].includes(l.s),
+        sBorder: !['0.25','0.5','0.75','1.0'].includes(l.s) ? A : '#2b2b2b',
+        onS: e => this.setLora(i,{s:e.target.value}),
+        sDec: () => this.setLora(i,{s:stepVal(l.s,'0.5',0.05,-1,true).replace('+','')}),
+        sInc: () => this.setLora(i,{s:stepVal(l.s,'0.5',0.05,1,true).replace('+','')}),
+        nameOpts: LORA_NAMES.map(n => ({v:n})), nameSel: LORA_NAMES.includes(l.name) ? l.name : '',
+        onNameSel: e => { if (e.target.value) this.setLora(i,{name:e.target.value}); },
+        nameVal: LORA_NAMES.includes(l.name) ? '' : l.name,
+        nameBorder: LORA_NAMES.includes(l.name) ? '#2b2b2b' : A,
+        onName: e => this.setLora(i,{name:e.target.value||'TextFusion'})})),
+      showPreview: this.props.showPreview ?? true,
+      aspectCss: `${aw} / ${ah}`, dims: v.upscale_on==='Off' ? `${w}×${h}` : `${w}×${h} → ${Math.round(w*(parseFloat(v.rescale)||2))}×${Math.round(h*(parseFloat(v.rescale)||2))}`,
+      isRef: sec.id==='ref', fileRef: this.fileRef,
+      refImg: st.refImg, hasRef: !!st.refImg, noRef: !st.refImg, refOn: refActive,
+      refMeta: st.refImg ? `${st.refName} · ${st.refW}×${st.refH}` : '',
+      dropBorder: st.drag ? A : '#333',
+      pickFile: () => this.fileRef.current?.click(),
+      onFile: e => { this.loadFile(e.target.files[0]); e.target.value=''; },
+      onDragOver: e => { e.preventDefault(); if (!this.state.drag) this.setState({drag:true}); },
+      onDragLeave: () => this.setState({drag:false}),
+      onDrop: e => { e.preventDefault(); this.setState({drag:false}); this.loadFile(e.dataTransfer.files[0]); },
+      clearRef: () => { this.setState(s => ({refImg:'', vals:{...s.vals, ref_on:'Off'}})); try { localStorage.removeItem('ca_ref'); } catch(e){} },
+      keepChips: KEEP.map(k => ({label:k, on:st.keep.includes(k), off:!st.keep.includes(k),
+        pick:()=>this.setState(s => ({keep: s.keep.includes(k) ? s.keep.filter(x=>x!==k) : [...s.keep,k]}))})),
+      keepAll: () => this.setState({keep:[...KEEP]}), keepNone: () => this.setState({keep:[]}),
+      baseOnly: () => this.setState(s => ({vals:{...s.vals, chain_on:'Off', upscale_on:'Off', detail_on:'Off'}})),
+      allPhases: () => this.setState(s => ({vals:{...s.vals, chain_on:'On', upscale_on:'On', detail_on:'On'}})),
+      pName: st.pName||'', onPName: e => this.setState({pName:e.target.value}),
+      onPKey: e => { if (e.key==='Enter') this.saveProfile(prompt); },
+      saveProfile: () => this.saveProfile(prompt),
+      exportTxt: () => this.download((st.pName||'').trim()||'prompt', prompt),
+      copyPrompt: () => navigator.clipboard?.writeText(prompt),
+      hasProfiles: (st.profiles||[]).length>0,
+      profiles: (st.profiles||[]).map(p => ({name:p.name, date:p.date, snippet:p.prompt.slice(0,90)+(p.prompt.length>90?'…':''),
+        load: () => this.setState({vals:{...this.state.vals,...p.vals}, texts:p.texts||{}, loras:p.loras||this.state.loras, seed:p.seed??this.state.seed, keep:p.keep||this.state.keep, drafts:{}}),
+        copy: () => navigator.clipboard?.writeText(p.prompt),
+        txt: () => this.download(p.name, p.prompt),
+        del: () => this.saveProfiles(this.state.profiles.filter(x => x.id!==p.id))})),
+      stages, prompt, promptMeta: `${parts.length} set · ${nr} random`,
+    };
+  }
+}
+</script>
+</body>
+</html>
